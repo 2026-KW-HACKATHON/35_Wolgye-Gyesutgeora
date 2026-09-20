@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>월계 보행지도</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div class="topbar">월계 보행지도<small>주민이 함께 만드는 생활 보행 지도</small></div>
+  <div class="legend">
+    <div><i style="background:#f57c00"></i>물리적 장애</div>
+    <div><i style="background:#fbc02d"></i>임시 장애물</div>
+    <div><i style="background:#2e9e5b"></i>여성 안심길</div>
+  </div>
+  <button class="report-btn" id="reportBtn" type="button">제보하기</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- 순서 중요: 앞 파일의 함수·변수를 뒤 파일이 사용합니다 -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/map.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
