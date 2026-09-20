@@ -13,6 +13,33 @@ const validUsername = v => USERNAME_RE.test(v);
 const validNickname = v => v.length >= 2 && v.length <= 20;
 
 /**
+ * 쿠키 옵션 (웹 브라우저용 httpOnly 쿠키)
+ * HTTPS 환경(운영)에서는 secure: true가 되도록 환경변수로 제어합니다.
+ */
+function cookieOptions() {
+  const maxAge = parseDurationMs(process.env.JWT_EXPIRES_IN || '7d');
+  return {
+    httpOnly: true,                                        // JS 접근 차단 (XSS 방어)
+    secure: process.env.NODE_ENV === 'production',        // HTTPS에서만 전송
+    sameSite: process.env.NODE_ENV === 'production'
+      ? 'strict'
+      : 'lax',
+    maxAge,
+  };
+}
+
+/**
+ * '7d', '24h', '60m' 같은 JWT 만료 문자열 → 밀리초 변환
+ */
+function parseDurationMs(str) {
+  const n = parseInt(str);
+  if (str.endsWith('d')) return n * 24 * 60 * 60 * 1000;
+  if (str.endsWith('h')) return n * 60 * 60 * 1000;
+  if (str.endsWith('m')) return n * 60 * 1000;
+  return 7 * 24 * 60 * 60 * 1000; // fallback: 7일
+}
+
+/**
  * GET /api/auth/check-username?username=...
  * 가입 화면의 "아이디 중복 확인" 버튼용
  */
@@ -58,8 +85,8 @@ async function checkNickname(req, res) {
 
 /**
  * POST /api/auth/register  { username, nickname, password }
- * 개인정보 없이 아이디·닉네임·비밀번호만으로 가입. 지역 제한 없음.
- * 중복 확인을 거쳤더라도 그사이 다른 사람이 가져갈 수 있으므로 여기서 다시 검사함.
+ * 개인정보 없이 아이디·닉네임·비밀번호만으로 가입.
+ * 성공 시 httpOnly 쿠키로 토큰을 발급하고, 응답 바디에도 포함합니다.
  */
 async function register(req, res) {
   const username = normUsername(req.body.username);
@@ -100,7 +127,12 @@ async function register(req, res) {
     );
 
     const user = rows[0];
-    return res.status(201).json({ token: signToken(user), user });
+    const token = signToken(user);
+
+    // 웹 브라우저: httpOnly 쿠키로 토큰 전달
+    res.cookie('access_token', token, cookieOptions());
+
+    return res.status(201).json({ token, user });
   } catch (err) {
     if (err.code === '23505') {
       const code = err.constraint?.includes('username') ? 'USERNAME_TAKEN' : 'NICKNAME_TAKEN';
@@ -113,7 +145,7 @@ async function register(req, res) {
 
 /**
  * POST /api/auth/login  { username, password }
- * 지역 제한 없음 (제보 등록 시에만 지역 검증)
+ * 성공 시 httpOnly 쿠키로 토큰을 발급하고, 응답 바디에도 포함합니다.
  */
 async function login(req, res) {
   const username = normUsername(req.body.username);
@@ -134,11 +166,30 @@ async function login(req, res) {
     }
 
     const { password: _, ...safeUser } = user;
-    return res.json({ token: signToken(safeUser), user: safeUser });
+    const token = signToken(safeUser);
+
+    // 웹 브라우저: httpOnly 쿠키로 토큰 전달
+    res.cookie('access_token', token, cookieOptions());
+
+    return res.json({ token, user: safeUser });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
   }
+}
+
+/**
+ * POST /api/auth/logout
+ * 웹 브라우저의 httpOnly 쿠키를 만료시킵니다.
+ * 클라이언트가 Bearer 토큰 방식이면 클라이언트 측에서 토큰을 삭제하면 됩니다.
+ */
+function logout(req, res) {
+  res.clearCookie('access_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  });
+  return res.json({ message: '로그아웃 되었습니다.' });
 }
 
 /**
@@ -166,4 +217,4 @@ function signToken(user) {
   );
 }
 
-module.exports = { checkUsername, checkNickname, register, login, me };
+module.exports = { checkUsername, checkNickname, register, login, logout, me };
