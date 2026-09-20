@@ -10,12 +10,18 @@ function showToast(msg, ms) {
   if (ms) setTimeout(() => el.remove(), ms);
 }
 
+// 제보하기: 로그인이 안 되어 있으면 먼저 로그인 창을 띄웁니다
 document.getElementById('reportBtn').addEventListener('click', () => {
-  showToast('제보 기능은 다음 단계에서 연결됩니다.', 2500);
+  if (!isLoggedIn()) {
+    openAuth('login', '제보하려면 로그인이 필요해요.', openReport);
+    return;
+  }
+  openReport();
 });
 
 (async function init() {
   locateMe();
+  restoreSession();
   try {
     setTagInfo(await fetchTags());
     const reports = await fetchReports();
@@ -23,6 +29,6 @@ document.getElementById('reportBtn').addEventListener('click', () => {
     if (reports.length === 0) showToast('아직 등록된 제보가 없어요.', 3000);
   } catch (e) {
     console.error(e);
-    showToast('서버에 연결할 수 없어요. 백엔드가 켜져 있는지 확인해 주세요.');
+    showToast(errorMessage(e));
   }
 })();
