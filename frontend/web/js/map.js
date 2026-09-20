@@ -1,6 +1,8 @@
 // 지도, 마커, 팝업, 현재 위치
 
 let tagInfo = {};   // code -> { label, category }
+let allTags = [];   // 서버에서 받은 태그 전체 (제보 폼의 선택지)
+const markersById = {};   // 제보 id -> 지도 마커
 
 const map = L.map('map', { zoomControl: false }).setView(DEFAULT_CENTER, 16);
 L.control.zoom({ position: 'topright' }).addTo(map);
@@ -12,6 +14,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 const markerLayer = L.layerGroup().addTo(map);
 
 function setTagInfo(tags) {
+  allTags = tags;
   tagInfo = {};
   tags.forEach(t => { tagInfo[t.code] = { label: t.label, category: t.category }; });
 }
@@ -76,16 +79,25 @@ function popupContent(r) {
 // 제보 목록을 마커로 그리기
 function renderReports(reports) {
   markerLayer.clearLayers();
+  Object.keys(markersById).forEach(id => delete markersById[id]);
   reports.forEach(r => {
     const icon = L.divIcon({
       className: '',
       html: '<div class="pin" style="background:' + markerColor(r.tags) + '"></div>',
       iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14]
     });
-    L.marker([r.latitude, r.longitude], { icon })
+    markersById[r.id] = L.marker([r.latitude, r.longitude], { icon })
       .bindPopup(() => popupContent(r), { minWidth: 220 })
       .addTo(markerLayer);
   });
+}
+
+// 지도에서 해당 제보로 이동해 팝업을 엽니다 (목록에 없으면 아무 일도 안 함)
+function focusReport(id) {
+  const marker = markersById[id];
+  if (!marker) return;
+  map.setView(marker.getLatLng(), 18);
+  marker.openPopup();
 }
 
 // 현재 위치 표시

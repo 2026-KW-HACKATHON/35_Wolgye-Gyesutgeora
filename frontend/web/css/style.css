@@ -105,6 +105,79 @@ body {
 .primary:active { background: #2459c4; }
 button:disabled { opacity: .6; cursor: default; }
 
+/* ===== 제보 등록 창 ===== */
+.sheet.report { padding-bottom: 0; }
+.sheet-title { margin: 0 40px 4px 0; font-size: 22px; }
+.section-title { margin: 20px 0 8px; font-size: 16px; font-weight: 700; }
+.section-title .hint { font-weight: 400; font-size: 12px; color: #6b7785; }
+
+.photo-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-grid:empty { display: none; }
+.photo-item {
+  position: relative; width: 96px; height: 96px; border-radius: 12px;
+  background: #f1f3f5; overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-fallback { font-size: 12px; color: #6b7785; text-align: center; padding: 4px; }
+.photo-del {
+  position: absolute; top: 2px; right: 2px; width: 32px; height: 32px; border: 0;
+  border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; cursor: pointer;
+}
+.photo-add {
+  width: 100%; min-height: 56px; margin-top: 8px; border: 2px dashed #2f6fed; border-radius: 12px;
+  background: #f5f8ff; color: #2f6fed; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.photo-add[hidden] { display: none; }
+
+.loc-box {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px; border-radius: 12px; font-size: 14px; line-height: 1.4;
+  background: #f1f3f5; color: #333;
+}
+.loc-box.ok { background: #e8f5ee; color: #17603a; }
+.loc-box.err { background: #fdecea; color: #a12622; }
+.loc-box .check-btn { min-height: 44px; }
+#miniMap {
+  height: 180px; margin-top: 8px; border-radius: 12px; overflow: hidden;
+  position: relative; isolation: isolate;   /* 지도 내부 겹침이 아래 버튼을 가리지 않게 */
+}
+#miniMap[hidden], .loc-address[hidden] { display: none; }
+.loc-address { margin-top: 6px; font-size: 14px; color: #333; line-height: 1.4; }
+
+.tag-group-title { margin: 12px 0 6px; font-size: 13px; color: #6b7785; font-weight: 700; }
+.tag-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-chip {
+  min-height: 48px; padding: 0 14px; border: 1.5px solid #c5ccd4; border-radius: 24px;
+  background: #fff; color: #1f2d3d; font-size: 15px; font-family: inherit; cursor: pointer;
+}
+.tag-chip.on { background: #2f6fed; border-color: #2f6fed; color: #fff; font-weight: 700; }
+
+.sheet textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid #c5ccd4; border-radius: 12px;
+  font-size: 16px; font-family: inherit; color: #1f2d3d; resize: vertical;
+}
+.sheet textarea:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+
+.sheet-footer {
+  position: sticky; bottom: 0; margin: 16px -20px 0; padding: 8px 20px 20px;
+  background: #fff; border-top: 1px solid #eceff2;
+}
+.sheet-footer .primary { margin-top: 8px; }
+
+/* 제보 완료 */
+.done { text-align: center; padding: 12px 0 24px; }
+.done .sheet-title { margin: 8px 0; }
+.done-check {
+  width: 72px; height: 72px; margin: 8px auto; border-radius: 50%;
+  background: #2e9e5b; color: #fff; font-size: 40px; line-height: 72px; font-weight: 700;
+}
+.done-summary { margin: 4px 0 16px; font-size: 15px; color: #444; word-break: keep-all; }
+.done-points {
+  margin: 0 0 8px; padding: 14px; border-radius: 12px; background: #fff8e1;
+  font-size: 14px; line-height: 1.5; text-align: left; color: #5d4700;
+}
+.done-points strong { display: block; margin-bottom: 4px; font-size: 15px; }
+
 .pin {
   width: 26px; height: 26px; border-radius: 50%;
   border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.45);

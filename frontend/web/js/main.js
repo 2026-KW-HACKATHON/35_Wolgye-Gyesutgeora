@@ -11,17 +11,12 @@ function showToast(msg, ms) {
 }
 
 // 제보하기: 로그인이 안 되어 있으면 먼저 로그인 창을 띄웁니다
-function startReport() {
-  // 제보 등록 화면은 4단계에서 연결합니다
-  showToast('제보 기능은 다음 단계에서 연결됩니다.', 2500);
-}
-
 document.getElementById('reportBtn').addEventListener('click', () => {
   if (!isLoggedIn()) {
-    openAuth('login', '제보하려면 로그인이 필요해요.', startReport);
+    openAuth('login', '제보하려면 로그인이 필요해요.', openReport);
     return;
   }
-  startReport();
+  openReport();
 });
 
 (async function init() {

@@ -1,11 +1,13 @@
 // 서버 호출은 모두 이 파일에서 합니다. (제보 등록 API는 4단계에서 여기에 추가)
 
-// 서버 오류를 담는 객체: status(HTTP 상태), code(서버 오류 코드, 없을 수 있음)
+// 서버 오류를 담는 객체: status(HTTP 상태), code(서버 오류 코드, 없을 수 있음),
+// data(서버가 보낸 전체 오류 내용. 예: OUT_OF_REGION의 distance_km)
 class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, data) {
     super(message);
     this.status = status;
     this.code = code;
+    this.data = data || null;
   }
 }
 
@@ -19,7 +21,7 @@ async function apiRequest(path, options = {}) {
   }
   let data = null;
   try { data = await res.json(); } catch (e) { /* 본문 없음 */ }
-  if (!res.ok) throw new ApiError(res.status, data && data.code, (data && data.error) || '');
+  if (!res.ok) throw new ApiError(res.status, data && data.code, (data && data.error) || '', data);
   return data;
 }
 
@@ -47,6 +49,13 @@ const ERROR_MESSAGES = {
 };
 
 function errorMessage(err) {
+  if (err.code === 'OUT_OF_REGION') {
+    const d = err.data || {};
+    let text = '월계1동 안에서만 제보할 수 있어요.';
+    if (d.distance_km != null) text += ' 지금 위치는 월계1동 중심에서 약 ' + d.distance_km + 'km 떨어져 있어요.';
+    if (d.allowed_radius_km != null) text += ' (제보 가능 반경 ' + d.allowed_radius_km + 'km)';
+    return text;
+  }
   if (err.code && ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];
   if (err.status >= 500) return '서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.';
   return err.message || '알 수 없는 오류가 발생했어요. 다시 시도해 주세요.';
@@ -62,6 +71,18 @@ async function fetchTags() {
 // 지도용 제보 목록
 async function fetchReports() {
   return (await apiRequest('/api/reports')).reports;
+}
+
+// ----- 제보 등록 -----
+
+// formData: latitude, longitude, tag_ids(쉼표 구분), images(1~3장), description(선택)
+// 파일이 들어 있어서 Content-Type은 브라우저가 알아서 붙이도록 직접 지정하지 않습니다.
+async function createReport(formData) {
+  return (await apiRequest('/api/reports', {
+    method: 'POST',
+    headers: authHeader(),
+    body: formData
+  })).report;
 }
 
 // ----- 로그인·회원가입 -----
