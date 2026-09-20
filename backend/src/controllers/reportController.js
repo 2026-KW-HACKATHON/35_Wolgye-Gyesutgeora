@@ -2,7 +2,11 @@ const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
 
 const STATUSES = ['pending', 'approved', 'rejected', 'duplicate'];
+const ACCESSIBILITY_STATUSES = ['passable', 'inconvenient', 'impassable'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 승인 시 지급할 포인트 (환경변수로 조정 가능, 기본 10)
+const POINTS_PER_APPROVAL = parseInt(process.env.POINTS_PER_APPROVAL || '10');
 
 /**
  * POST /api/reports
@@ -10,15 +14,28 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * - 인증 필수 (req.user.id)
  * - 지역 검증은 requireInRegion 미들웨어에서 먼저 처리됨
  * - 사진 최소 1장 필수 (기획안: "사진 촬영(필수)")
- * - multipart/form-data: latitude, longitude, title?, description?, tag_ids(comma-separated), images(files, 최대 3장)
+ * - multipart/form-data:
+ *     latitude, longitude,
+ *     accessibility_status (passable|inconvenient|impassable, 선택),
+ *     title?, description?,
+ *     tag_ids (comma-separated),
+ *     images (files, 최대 3장)
  */
 async function createReport(req, res) {
-  const { latitude, longitude, title, description, tag_ids } = req.body;
+  const { latitude, longitude, title, description, tag_ids, accessibility_status } = req.body;
   const userId = req.user.id;
   const files = req.files || [];
 
   if (files.length === 0) {
     return res.status(400).json({ error: '사진을 최소 1장 첨부해야 합니다.' });
+  }
+
+  // accessibility_status 값 검증 (전달된 경우에만)
+  if (accessibility_status && !ACCESSIBILITY_STATUSES.includes(accessibility_status)) {
+    removeUploadedFiles(req);
+    return res.status(400).json({
+      error: `accessibility_status는 ${ACCESSIBILITY_STATUSES.join(', ')} 중 하나여야 합니다.`,
+    });
   }
 
   const tagIdList = [...new Set(parseTagIds(tag_ids))];
@@ -38,10 +55,10 @@ async function createReport(req, res) {
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO reports (user_id, title, description, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, user_id, title, description, latitude, longitude, status, created_at`,
-      [userId, title || null, description || null, latitude, longitude]
+      `INSERT INTO reports (user_id, title, description, latitude, longitude, accessibility_status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, user_id, title, description, latitude, longitude, accessibility_status, status, created_at`,
+      [userId, title || null, description || null, latitude, longitude, accessibility_status || null]
     );
     const report = rows[0];
 
@@ -83,9 +100,10 @@ async function createReport(req, res) {
  * (다른 지역에서도 월계1동 지도를 미리 확인할 수 있어야 하므로)
  *
  * query: status (선택) - 생략 시 전체 상태 노출
+ *        프론트: GET /api/reports?status=approved 로 승인된 제보만 표시
  */
 async function listReports(req, res) {
-  const status = req.query.status; // 'pending' | 'approved' | 'rejected' | 'duplicate' | undefined(all)
+  const status = req.query.status;
   if (status && !STATUSES.includes(status)) {
     return res.status(400).json({ error: `status는 ${STATUSES.join(', ')} 중 하나여야 합니다.` });
   }
@@ -100,8 +118,9 @@ async function listReports(req, res) {
 
     const { rows } = await pool.query(
       `SELECT
-         r.id, r.title, r.description, r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
-         r.status, r.view_count, r.created_at,
+         r.id, r.title, r.description,
+         r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
+         r.accessibility_status, r.status, r.view_count, r.created_at,
          u.nickname AS reporter_nickname,
          COALESCE(
            ARRAY_AGG(DISTINCT t.code) FILTER (WHERE t.code IS NOT NULL), '{}'
@@ -135,8 +154,9 @@ async function listMyReports(req, res) {
   try {
     const { rows } = await pool.query(
       `SELECT
-         r.id, r.title, r.description, r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
-         r.status, r.created_at,
+         r.id, r.title, r.description,
+         r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
+         r.accessibility_status, r.status, r.created_at,
          COALESCE(
            ARRAY_AGG(DISTINCT t.code) FILTER (WHERE t.code IS NOT NULL), '{}'
          ) AS tags,
@@ -180,6 +200,85 @@ async function getReport(req, res) {
   }
 }
 
+/**
+ * PATCH /api/reports/:id/status
+ * 관리자 전용: 제보 상태 변경 + 승인 시 포인트 지급
+ *
+ * body: { status: 'approved' | 'rejected' | 'duplicate' }
+ *
+ * 승인(approved) 처리 시:
+ *   - reports.point_awarded가 FALSE인 경우에만 포인트 지급 (중복 방지)
+ *   - users.points += POINTS_PER_APPROVAL
+ *   - reports.point_awarded = TRUE, reports.points_amount = POINTS_PER_APPROVAL
+ */
+async function updateReportStatus(req, res) {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) {
+    return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+  }
+
+  const { status } = req.body;
+  // pending으로의 역전환은 허용하지 않음 (의도치 않은 조작 방지)
+  const ALLOWED = ['approved', 'rejected', 'duplicate'];
+  if (!status || !ALLOWED.includes(status)) {
+    return res.status(400).json({
+      error: `status는 ${ALLOWED.join(', ')} 중 하나여야 합니다.`,
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    // 현재 제보 조회
+    const { rows: existing } = await client.query(
+      'SELECT id, user_id, status, point_awarded FROM reports WHERE id = $1',
+      [id]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+    }
+    const report = existing[0];
+
+    await client.query('BEGIN');
+
+    // 상태 업데이트
+    await client.query(
+      'UPDATE reports SET status = $1 WHERE id = $2',
+      [status, id]
+    );
+
+    let pointsAwarded = 0;
+
+    // 승인 && 아직 포인트 미지급인 경우에만 포인트 지급
+    if (status === 'approved' && !report.point_awarded) {
+      await client.query(
+        `UPDATE reports
+         SET point_awarded = TRUE, points_amount = $1
+         WHERE id = $2`,
+        [POINTS_PER_APPROVAL, id]
+      );
+      await client.query(
+        'UPDATE users SET points = points + $1 WHERE id = $2',
+        [POINTS_PER_APPROVAL, report.user_id]
+      );
+      pointsAwarded = POINTS_PER_APPROVAL;
+    }
+
+    await client.query('COMMIT');
+
+    const updated = await getReportById(id);
+    return res.json({
+      report: updated,
+      ...(pointsAwarded > 0 && { points_awarded: pointsAwarded }),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    return res.status(500).json({ error: '서버 오류' });
+  } finally {
+    client.release();
+  }
+}
+
 // ------------------------------------------------------------
 // 내부 유틸
 // ------------------------------------------------------------
@@ -187,8 +286,11 @@ async function getReport(req, res) {
 async function getReportById(id) {
   const { rows } = await pool.query(
     `SELECT
-       r.id, r.user_id, r.title, r.description, r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
-       r.address, r.status, r.view_count, r.created_at, r.updated_at,
+       r.id, r.user_id, r.title, r.description,
+       r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
+       r.address, r.accessibility_status, r.status,
+       r.point_awarded, r.points_amount,
+       r.view_count, r.created_at, r.updated_at,
        u.nickname AS reporter_nickname,
        COALESCE(
          ARRAY_AGG(DISTINCT t.code) FILTER (WHERE t.code IS NOT NULL), '{}'
@@ -219,4 +321,4 @@ function parseTagIds(raw) {
     .filter(v => !Number.isNaN(v));
 }
 
-module.exports = { createReport, listReports, listMyReports, getReport };
+module.exports = { createReport, listReports, listMyReports, getReport, updateReportStatus };
