@@ -14,11 +14,20 @@ body {
 
 .topbar {
   position: absolute; top: 12px; left: 12px; right: 12px; z-index: 1000;
-  background: #fff; border-radius: 12px; padding: 12px 16px;
+  background: #fff; border-radius: 12px; padding: 10px 12px 10px 16px;
   box-shadow: 0 2px 10px rgba(0,0,0,.18);
   font-size: 16px; font-weight: 700; color: #1f2d3d;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 .topbar small { display: block; font-weight: 400; font-size: 12px; color: #6b7785; margin-top: 2px; }
+.topbar-title { min-width: 0; }
+.topbar-user { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; font-size: 13px; font-weight: 600; }
+.topbar-user #userName { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-btn {
+  min-height: 44px; padding: 0 14px; border: 1px solid #2f6fed; border-radius: 22px;
+  background: #fff; color: #2f6fed; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.auth-btn:active { background: #eaf1fe; }
 
 .legend {
   position: absolute; left: 12px; bottom: 96px; z-index: 1000;
@@ -37,12 +46,64 @@ body {
 .report-btn:active { background: #2459c4; }
 
 .toast {
-  position: absolute; top: 76px; left: 16px; right: 16px; z-index: 1100;
+  position: absolute; top: 84px; left: 16px; right: 16px; z-index: 1100;
   background: rgba(31,45,61,.92); color: #fff; border-radius: 10px;
   padding: 10px 14px; font-size: 14px; text-align: center;
 }
 
-.leaflet-top.leaflet-right { top: 76px; }   /* 상단 바 아래로 */
+.leaflet-top.leaflet-right { top: 84px; }   /* 상단 바 아래로 */
+
+/* ===== 로그인·회원가입 시트 ===== */
+.sheet-backdrop {
+  position: absolute; inset: 0; z-index: 2000;
+  background: rgba(20,30,45,.5);
+  display: flex; align-items: flex-end;
+}
+.sheet-backdrop[hidden] { display: none; }
+.sheet {
+  position: relative; width: 100%; max-height: 92%; overflow-y: auto;
+  background: #fff; border-radius: 20px 20px 0 0;
+  padding: 20px 20px 28px; color: #1f2d3d;
+}
+.sheet-close {
+  position: absolute; top: 8px; right: 8px; width: 44px; height: 44px;
+  border: 0; background: none; font-size: 20px; color: #6b7785; cursor: pointer;
+}
+.tabs { display: flex; gap: 8px; margin: 0 40px 12px 0; }
+.tab {
+  flex: 1; min-height: 48px; border: 0; border-radius: 12px;
+  background: #f1f3f5; color: #6b7785; font-size: 17px; font-weight: 700; cursor: pointer;
+}
+.tab.active { background: #2f6fed; color: #fff; }
+.sheet-note { margin: 0 0 8px; font-size: 14px; color: #2459c4; min-height: 0; }
+.sheet-note:empty { display: none; }
+.sheet-note.small { margin: 12px 0 0; font-size: 13px; color: #6b7785; }
+
+.sheet label { display: block; margin: 14px 0 6px; font-size: 15px; font-weight: 700; }
+.sheet .hint { font-weight: 400; font-size: 12px; color: #6b7785; }
+.sheet input {
+  width: 100%; min-height: 52px; padding: 0 14px;
+  border: 1.5px solid #c5ccd4; border-radius: 12px;
+  font-size: 17px; font-family: inherit; color: #1f2d3d; background: #fff;
+}
+.sheet input:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+.sheet .row { display: flex; gap: 8px; }
+.sheet .row input { flex: 1; min-width: 0; }
+.check-btn {
+  flex: 0 0 auto; min-height: 52px; padding: 0 12px; border: 1.5px solid #2f6fed;
+  border-radius: 12px; background: #fff; color: #2f6fed; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.check-btn:active { background: #eaf1fe; }
+.field-msg { min-height: 20px; margin-top: 6px; font-size: 14px; line-height: 1.4; }
+.field-msg:empty { min-height: 0; margin: 0; }
+.field-msg.err { color: #c62828; }
+.field-msg.ok { color: #1b7f43; }
+.primary {
+  width: 100%; min-height: 54px; margin-top: 16px; border: 0; border-radius: 27px;
+  background: #2f6fed; color: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
+}
+.primary:active { background: #2459c4; }
+button:disabled { opacity: .6; cursor: default; }
 
 .pin {
   width: 26px; height: 26px; border-radius: 50%;
