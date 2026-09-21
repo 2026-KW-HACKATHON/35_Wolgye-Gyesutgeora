@@ -68,9 +68,10 @@ async function fetchTags() {
   return (await apiRequest('/api/tags')).tags;
 }
 
-// 지도용 제보 목록
+// 지도용 제보 목록 (REPORT_STATUS에 따라 승인된 제보만 받거나 전체를 받음)
 async function fetchReports() {
-  return (await apiRequest('/api/reports')).reports;
+  const query = REPORT_STATUS ? '?status=' + encodeURIComponent(REPORT_STATUS) : '';
+  return (await apiRequest('/api/reports' + query)).reports;
 }
 
 // ----- 제보 등록 -----

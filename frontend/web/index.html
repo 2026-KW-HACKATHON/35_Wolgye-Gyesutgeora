@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>월계 보행지도</title>
+<title>월계동행</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -11,7 +11,7 @@
 <div id="app">
   <div id="map"></div>
   <div class="topbar">
-    <div class="topbar-title">월계 보행지도<small>주민이 함께 만드는 생활 보행 지도</small></div>
+    <div class="topbar-title">월계동행<small>주민이 함께 만드는 생활 보행 지도</small></div>
     <div class="topbar-user">
       <span id="userName"></span>
       <button id="authBtn" class="auth-btn" type="button">로그인</button>
@@ -22,7 +22,35 @@
     <div><i style="background:#fbc02d"></i>임시 장애물</div>
     <div><i style="background:#2e9e5b"></i>여성 안심길</div>
   </div>
+  <button class="filter-btn" id="filterBtn" type="button" aria-label="보행환경 필터 열기">필터</button>
+  <button class="locate-btn" id="locateBtn" type="button" aria-label="내 위치로 이동">내 위치</button>
   <button class="report-btn" id="reportBtn" type="button">제보하기</button>
+
+  <!-- 보행환경 필터 창 -->
+  <div class="sheet-backdrop" id="filterSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="보행환경 필터">
+      <button class="sheet-close" id="filterClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">보행환경 필터</h2>
+      <p class="sheet-note small">고른 조건에 맞는 제보만 지도에 보여요. 아무것도 고르지 않으면 전체가 보여요.</p>
+
+      <div id="filterStatusSection">
+        <div class="section-title">통행 상태 <span class="hint">(여러 개 선택 가능)</span></div>
+        <div class="tag-group" id="filterStatus"></div>
+      </div>
+
+      <div class="section-title">불편 유형 <span class="hint">(여러 개 선택 가능)</span></div>
+      <div id="filterTypes"></div>
+      <div class="field-msg" id="filterMsg" role="alert"></div>
+
+      <div class="sheet-footer">
+        <div class="filter-result" id="filterResult" aria-live="polite"></div>
+        <div class="filter-actions">
+          <button class="check-btn" id="filterReset" type="button">초기화</button>
+          <button class="primary" id="filterDone" type="button">지도에서 보기</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 제보 등록 창 -->
   <div class="sheet-backdrop" id="reportSheet" hidden>
@@ -47,11 +75,17 @@
         <div class="loc-address" id="locAddress" hidden></div>
         <div class="field-msg" id="locMsg" role="alert"></div>
 
-        <div class="section-title">3. 어떤 불편이 있나요? <span class="hint">(여러 개 선택 가능)</span></div>
+        <div id="statusSection">
+          <div class="section-title">3. 통행 상태 <span class="hint">(필수, 하나만 선택)</span></div>
+          <div class="status-picker" id="statusPicker" role="radiogroup" aria-label="통행 상태"></div>
+          <div class="field-msg" id="statusMsg" role="alert"></div>
+        </div>
+
+        <div class="section-title">4. 어떤 불편이 있나요? <span class="hint">(여러 개 선택 가능)</span></div>
         <div id="tagPicker"></div>
         <div class="field-msg" id="tagMsg" role="alert"></div>
 
-        <div class="section-title">4. 설명 <span class="hint">(선택)</span></div>
+        <div class="section-title">5. 설명 <span class="hint">(선택)</span></div>
         <textarea id="reportDesc" name="description" rows="3" maxlength="300" placeholder="예) 입구에 계단이 5개 있어요"></textarea>
         <div class="field-msg" id="descMsg" role="alert"></div>
 
@@ -68,10 +102,10 @@
         <p class="done-summary" id="doneSummary"></p>
         <div class="done-points">
           <strong>포인트 안내</strong>
-          검토 후 승인되면 포인트가 지급될 예정이에요. 포인트는 나중에 지역 상점 혜택으로 쓸 수 있어요.
+          지금은 <b>검토 중</b>이에요. 검토 후 승인되면 지도에 표시되고 포인트가 지급될 예정이에요. 포인트는 나중에 지역 상점 혜택으로 쓸 수 있어요.
         </div>
         <p class="sheet-note small">소중한 제보 고마워요. 이웃의 안전한 이동에 큰 도움이 돼요.</p>
-        <button class="primary" id="doneMapBtn" type="button">지도에서 확인하기</button>
+        <button class="primary" id="doneMapBtn" type="button">지도로 돌아가기</button>
       </div>
     </div>
   </div>
@@ -136,6 +170,7 @@
 <script src="js/map.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/report.js"></script>
+<script src="js/filter.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

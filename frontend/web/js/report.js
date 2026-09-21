@@ -4,14 +4,14 @@ const MAX_PHOTOS = 3;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;                  // 서버 제한과 같음 (10MB)
 const ALLOWED_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];   // 서버 허용 확장자
 
-// 태그 분류(category) → 제목. 서버에 새 분류가 생기면 여기에 추가하세요.
+// 태그 분류(category) → 제목. 서버에 새 분류가 생기면 여기에 추가하세요. 없으면 "기타"로 묶입니다.
+// (통행 상태 분류 'accessibility'는 아래에서 따로, 하나만 고르는 버튼으로 보여줍니다)
 const CATEGORY_LABELS = {
   physical: '물리적 장애',
   temp: '임시 장애물',
-  safety: '안전',
-  status: '통행 상태',
-  accessibility: '통행 상태'
+  safety: '안전'
 };
+const STATUS_CATEGORY = 'accessibility';   // 통행 상태 태그의 분류 (code: passable | inconvenient | impassable)
 
 const reportSheet = document.getElementById('reportSheet');
 const reportForm = document.getElementById('reportForm');
@@ -20,7 +20,8 @@ const photoInput = document.getElementById('photoInput');
 
 let photos = [];                 // [{ file, url }] 미리보기용 주소 포함
 let position = null;             // { lat, lng }
-let selectedTags = new Set();    // 선택한 태그 id
+let selectedTags = new Set();    // 선택한 태그 id (통행 상태 제외)
+let selectedStatus = null;       // 선택한 통행 상태 태그 { id, code, label }
 let reportFinished = false;      // 제보 완료 화면을 보고 있는지
 let lastReport = null;           // 방금 등록한 제보
 
@@ -31,7 +32,7 @@ function setReportMsg(id, text, kind) {
 }
 
 function clearReportMsgs() {
-  ['photoMsg', 'locMsg', 'tagMsg', 'descMsg', 'reportFormMsg'].forEach(id => setReportMsg(id, ''));
+  ['photoMsg', 'locMsg', 'statusMsg', 'tagMsg', 'descMsg', 'reportFormMsg'].forEach(id => setReportMsg(id, ''));
 }
 
 // ----- 사진 -----
@@ -39,6 +40,19 @@ function clearReportMsgs() {
 function fileExt(name) {
   const i = name.lastIndexOf('.');
   return i < 0 ? '' : name.slice(i).toLowerCase();
+}
+
+// 미리보기용 작은 그림(data: 주소)을 만듭니다. 서버 보안 설정(CSP)이 blob: 주소를 막기 때문에
+// 사진 원본을 바로 쓰지 않고, 작게 줄인 그림으로 바꿔서 보여줍니다. (전송은 원본 파일 그대로)
+async function makeThumb(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 240 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  if (bmp.close) bmp.close();
+  return canvas.toDataURL('image/jpeg', 0.8);
 }
 
 function addFiles(fileList) {
@@ -51,7 +65,12 @@ function addFiles(fileList) {
     } else if (file.size > MAX_FILE_BYTES) {
       problems.push('사진 한 장은 10MB 이하여야 해요.');
     } else {
-      photos.push({ file, url: URL.createObjectURL(file) });
+      const p = { file, url: '', state: 'loading' };   // state: loading | ok | failed
+      photos.push(p);
+      makeThumb(file)
+        .then(url => { p.url = url; p.state = 'ok'; })
+        .catch(() => { p.state = 'failed'; })   // 브라우저가 못 여는 형식(예: heic)
+        .then(() => { if (photos.includes(p)) renderPhotos(); });
     }
   });
   renderPhotos();
@@ -59,7 +78,6 @@ function addFiles(fileList) {
 }
 
 function removePhoto(index) {
-  URL.revokeObjectURL(photos[index].url);
   photos.splice(index, 1);
   renderPhotos();
   setReportMsg('photoMsg', '');
@@ -72,18 +90,18 @@ function renderPhotos() {
     const item = document.createElement('div');
     item.className = 'photo-item';
 
-    const img = document.createElement('img');
-    img.src = p.url;
-    img.alt = '선택한 사진 ' + (i + 1);
-    // 브라우저가 못 보여주는 형식(예: heic)은 안내 글자로 대신합니다
-    img.addEventListener('error', () => {
-      img.remove();
+    if (p.state === 'ok') {
+      const img = document.createElement('img');
+      img.src = p.url;
+      img.alt = '선택한 사진 ' + (i + 1);
+      item.appendChild(img);
+    } else {
+      // 준비 중이거나, 브라우저가 못 보여주는 형식(예: heic)이면 안내 글자로 대신합니다
       const t = document.createElement('span');
       t.className = 'photo-fallback';
-      t.textContent = '미리보기 없음';
-      item.insertBefore(t, item.firstChild);
-    });
-    item.appendChild(img);
+      t.textContent = p.state === 'failed' ? '미리보기 없음' : '불러오는 중…';
+      item.appendChild(t);
+    }
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -124,7 +142,7 @@ function showMiniMap(lat, lng, accuracy) {
       dragging: false, touchZoom: false, scrollWheelZoom: false,
       doubleClickZoom: false, boxZoom: false, keyboard: false
     });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(miniMap);
+    L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(miniMap);
     miniDot = L.marker(ll, {
       icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
       interactive: false, keyboard: false
@@ -179,13 +197,48 @@ function requestLocation() {
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
 }
 
+// ----- 통행 상태 (하나만 선택) -----
+
+function statusTags() {
+  return allTags.filter(t => t.category === STATUS_CATEGORY);
+}
+
+function renderStatusPicker() {
+  const list = statusTags();
+  // 서버에 통행 상태 태그가 없으면(예전 버전) 이 항목은 숨기고 필수로 요구하지 않습니다
+  document.getElementById('statusSection').hidden = list.length === 0;
+  const box = document.getElementById('statusPicker');
+  box.textContent = '';
+  list.forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'status-btn';
+    btn.dataset.code = t.code;
+    btn.textContent = t.label;
+    btn.setAttribute('role', 'radio');
+    const on = !!selectedStatus && selectedStatus.id === t.id;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-checked', on);
+    btn.addEventListener('click', () => {
+      selectedStatus = t;
+      box.querySelectorAll('.status-btn').forEach(b => {
+        const mine = b === btn;
+        b.classList.toggle('on', mine);
+        b.setAttribute('aria-checked', mine);
+      });
+      setReportMsg('statusMsg', '');
+    });
+    box.appendChild(btn);
+  });
+}
+
 // ----- 태그 -----
 
 function renderTagPicker() {
   const box = document.getElementById('tagPicker');
   box.textContent = '';
   const groups = {};
-  allTags.forEach(t => {
+  allTags.filter(t => t.category !== STATUS_CATEGORY).forEach(t => {
     const key = CATEGORY_LABELS[t.category] || '기타';
     (groups[key] = groups[key] || []).push(t);
   });
@@ -219,13 +272,14 @@ function renderTagPicker() {
 // ----- 창 열고 닫기 -----
 
 function hasDraft() {
-  return photos.length > 0 || selectedTags.size > 0 || reportForm.elements.description.value.trim() !== '';
+  return photos.length > 0 || selectedTags.size > 0 || !!selectedStatus
+    || reportForm.elements.description.value.trim() !== '';
 }
 
 async function openReport() {
-  photos.forEach(p => URL.revokeObjectURL(p.url));
   photos = [];
   selectedTags = new Set();
+  selectedStatus = null;
   lastReport = null;
   reportFinished = false;
   reportForm.reset();
@@ -241,13 +295,13 @@ async function openReport() {
     try { setTagInfo(await fetchTags()); }
     catch (err) { setReportMsg('tagMsg', errorMessage(err), 'err'); }
   }
+  renderStatusPicker();
   renderTagPicker();
 }
 
 function closeReport(force) {
   if (!force && !reportFinished && hasDraft() && !confirm('작성 중인 내용이 사라져요. 닫을까요?')) return;
   reportSheet.hidden = true;
-  photos.forEach(p => URL.revokeObjectURL(p.url));
   photos = [];
 }
 
@@ -270,13 +324,20 @@ async function submitReport() {
   let bad = false;
   if (photos.length === 0) { setReportMsg('photoMsg', '사진을 1장 이상 올려 주세요.', 'err'); bad = true; }
   if (!position) { setReportMsg('locMsg', '현재 위치를 확인한 뒤에 등록할 수 있어요.', 'err'); bad = true; }
-  if (selectedTags.size === 0) { setReportMsg('tagMsg', '해당하는 항목을 1개 이상 선택해 주세요.', 'err'); bad = true; }
+  if (statusTags().length > 0 && !selectedStatus) { setReportMsg('statusMsg', '통행 상태를 선택해 주세요.', 'err'); bad = true; }
+  if (selectedTags.size === 0) { setReportMsg('tagMsg', '어떤 불편인지 1개 이상 선택해 주세요.', 'err'); bad = true; }
   if (bad) return;
 
   const fd = new FormData();
   fd.append('latitude', position.lat);
   fd.append('longitude', position.lng);
-  fd.append('tag_ids', Array.from(selectedTags).join(','));
+  // 통행 상태는 전용 칸(accessibility_status)과 태그 양쪽에 모두 기록합니다 (백엔드 샘플 데이터와 같은 방식)
+  const tagIds = Array.from(selectedTags);
+  if (selectedStatus) {
+    tagIds.push(selectedStatus.id);
+    fd.append('accessibility_status', selectedStatus.code);
+  }
+  fd.append('tag_ids', tagIds.join(','));
   const desc = reportForm.elements.description.value.trim();
   if (desc) fd.append('description', desc);
   photos.forEach(p => fd.append('images', p.file));
