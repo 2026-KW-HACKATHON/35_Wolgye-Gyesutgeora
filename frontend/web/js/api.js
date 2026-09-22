@@ -86,6 +86,11 @@ async function createReport(formData) {
   })).report;
 }
 
+// 내가 등록한 제보 목록 (로그인 필요): [{ id, title, description, accessibility_status, status, tags, images, created_at }]
+async function fetchMyReports() {
+  return (await apiRequest('/api/reports/mine', { headers: authHeader() })).reports;
+}
+
 // ----- 로그인·회원가입 -----
 
 // 아이디·닉네임 중복 확인: { available, message }

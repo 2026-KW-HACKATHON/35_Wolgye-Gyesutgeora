@@ -13,6 +13,7 @@
   <div class="topbar">
     <div class="topbar-title">월계동행<small>주민이 함께 만드는 생활 보행 지도</small></div>
     <div class="topbar-user">
+      <button id="mypageBtn" class="auth-btn" type="button" hidden>마이페이지</button>
       <span id="userName"></span>
       <button id="authBtn" class="auth-btn" type="button">로그인</button>
     </div>
@@ -25,6 +26,24 @@
   <button class="filter-btn" id="filterBtn" type="button" aria-label="보행환경 필터 열기">필터</button>
   <button class="locate-btn" id="locateBtn" type="button" aria-label="내 위치로 이동">내 위치</button>
   <button class="report-btn" id="reportBtn" type="button">제보하기</button>
+
+  <!-- 마이페이지: 내 제보 목록 + 포인트 -->
+  <div class="sheet-backdrop" id="mypageSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="마이페이지">
+      <button class="sheet-close" id="mypageClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">마이페이지</h2>
+
+      <div class="points-card">
+        <div class="points-label">내 포인트</div>
+        <div class="points-value" id="mypagePoints">0<span>P</span></div>
+        <p class="sheet-note small">제보가 승인되면 포인트가 지급돼요. 앞으로 지역 상점 혜택으로 쓸 수 있어요.</p>
+      </div>
+
+      <div class="section-title">내 제보</div>
+      <div class="field-msg" id="mypageMsg" role="alert"></div>
+      <div id="mypageList"></div>
+    </div>
+  </div>
 
   <!-- 보행환경 필터 창 -->
   <div class="sheet-backdrop" id="filterSheet" hidden>
@@ -171,6 +190,7 @@
 <script src="js/auth.js"></script>
 <script src="js/report.js"></script>
 <script src="js/filter.js"></script>
+<script src="js/mypage.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
