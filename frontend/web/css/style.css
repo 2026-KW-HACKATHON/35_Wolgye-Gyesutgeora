@@ -251,6 +251,7 @@ button:disabled { opacity: .6; cursor: default; }
   width: 72px; height: 72px; margin: 8px auto; border-radius: 50%;
   background: #2e9e5b; color: #fff; font-size: 40px; line-height: 72px; font-weight: 700;
 }
+.done-check.warn { background: #e08a00; }   /* 아직 저장되지 않은 상태(화면만 준비됨) 안내용 */
 .done-summary { margin: 4px 0 16px; font-size: 15px; color: #444; word-break: keep-all; }
 .done-points {
   margin: 0 0 8px; padding: 14px; border-radius: 12px; background: #fff8e1;
@@ -281,3 +282,8 @@ button:disabled { opacity: .6; cursor: default; }
 }
 .popup .desc { margin: 4px 0; color: #333; word-break: break-word; }
 .popup .meta { color: #6b7785; font-size: 13px; }
+.popup-flag {
+  display: block; width: 100%; margin-top: 8px; padding: 8px 0; border: 0; border-top: 1px solid #eceff2;
+  background: none; color: #8a94a0; font-size: 12px; font-family: inherit; text-align: center;
+  text-decoration: underline; cursor: pointer;
+}

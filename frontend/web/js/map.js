@@ -97,6 +97,14 @@ function popupContent(r) {
   meta.className = 'meta';
   meta.textContent = formatDate(r.created_at) + ' · ' + r.reporter_nickname;
   box.appendChild(meta);
+
+  // 잘못된 정보 신고 (openFlag는 js/flag.js)
+  const flagBtn = document.createElement('button');
+  flagBtn.type = 'button';
+  flagBtn.className = 'popup-flag';
+  flagBtn.textContent = '잘못된 정보 신고';
+  flagBtn.addEventListener('click', () => openFlag(r.id));
+  box.appendChild(flagBtn);
   return box;
 }
 

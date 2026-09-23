@@ -45,6 +45,35 @@
     </div>
   </div>
 
+  <!-- 잘못된 정보 신고 창 -->
+  <div class="sheet-backdrop" id="flagSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="잘못된 정보 신고">
+      <button class="sheet-close" id="flagClose" type="button" aria-label="닫기">✕</button>
+
+      <form id="flagForm" novalidate>
+        <h2 class="sheet-title">잘못된 정보 신고</h2>
+        <p class="sheet-note small">이 제보에 문제가 있다고 생각되면 알려주세요. 검토 후 조치할게요.</p>
+
+        <div class="section-title">신고 사유 <span class="hint">(하나만 선택)</span></div>
+        <div class="tag-group" id="flagReasonPicker"></div>
+        <div class="field-msg" id="flagReasonMsg" role="alert"></div>
+
+        <div class="section-title">자세한 설명 <span class="hint">(선택)</span></div>
+        <textarea id="flagDesc" name="description" rows="3" maxlength="300" placeholder="예) 실제로는 계단이 없어졌어요"></textarea>
+
+        <div class="field-msg" id="flagFormMsg" role="alert"></div>
+        <button class="primary" id="flagSubmit" type="submit">신고하기</button>
+      </form>
+
+      <div id="flagDone" class="done" hidden>
+        <div class="done-check" id="flagDoneIcon">✓</div>
+        <h2 class="sheet-title">신고를 확인했어요</h2>
+        <p class="done-summary" id="flagDoneText"></p>
+        <button class="primary" id="flagDoneClose" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 보행환경 필터 창 -->
   <div class="sheet-backdrop" id="filterSheet" hidden>
     <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="보행환경 필터">
@@ -191,6 +220,7 @@
 <script src="js/report.js"></script>
 <script src="js/filter.js"></script>
 <script src="js/mypage.js"></script>
+<script src="js/flag.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
