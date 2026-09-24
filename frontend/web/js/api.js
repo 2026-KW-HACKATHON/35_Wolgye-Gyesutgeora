@@ -68,9 +68,16 @@ async function fetchTags() {
   return (await apiRequest('/api/tags')).tags;
 }
 
+<<<<<<< HEAD
 // 지도용 제보 목록
 async function fetchReports() {
   return (await apiRequest('/api/reports')).reports;
+=======
+// 지도용 제보 목록 (REPORT_STATUS에 따라 승인된 제보만 받거나 전체를 받음)
+async function fetchReports() {
+  const query = REPORT_STATUS ? '?status=' + encodeURIComponent(REPORT_STATUS) : '';
+  return (await apiRequest('/api/reports' + query)).reports;
+>>>>>>> da8bee35ec134ce48e51ae8c11e4cc8ce2a51467
 }
 
 // ----- 제보 등록 -----
@@ -85,6 +92,14 @@ async function createReport(formData) {
   })).report;
 }
 
+<<<<<<< HEAD
+=======
+// 내가 등록한 제보 목록 (로그인 필요): [{ id, title, description, accessibility_status, status, tags, images, created_at }]
+async function fetchMyReports() {
+  return (await apiRequest('/api/reports/mine', { headers: authHeader() })).reports;
+}
+
+>>>>>>> da8bee35ec134ce48e51ae8c11e4cc8ce2a51467
 // ----- 로그인·회원가입 -----
 
 // 아이디·닉네임 중복 확인: { available, message }

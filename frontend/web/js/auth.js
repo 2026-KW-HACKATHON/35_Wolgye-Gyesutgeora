@@ -41,6 +41,10 @@ function updateAuthBar() {
   const loggedIn = isLoggedIn();
   document.getElementById('userName').textContent = loggedIn && user ? user.nickname + '님' : '';
   document.getElementById('authBtn').textContent = loggedIn ? '로그아웃' : '로그인';
+<<<<<<< HEAD
+=======
+  document.getElementById('mypageBtn').hidden = !loggedIn;
+>>>>>>> da8bee35ec134ce48e51ae8c11e4cc8ce2a51467
 }
 
 // ----- 로그인·회원가입 창 -----

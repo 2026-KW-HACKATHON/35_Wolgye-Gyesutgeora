@@ -1,0 +1,75 @@
+/* 관리자 페이지 전용 스타일. style.css의 색·버튼 스타일(.primary, .check-btn, .field-msg,
+   .review-badge, .status-badge, .my-title, .my-meta)을 그대로 재사용합니다.
+   주민용 화면(#app)과 달리 390px로 제한하지 않고, 데스크톱에서도 편하게 씁니다. */
+
+body.admin-body { align-items: flex-start; }
+
+#adminApp {
+  width: 100%; max-width: 720px; margin: 0 auto;
+  min-height: 100%; background: #fff;
+  padding: 24px 20px 60px;
+}
+
+#adminApp h1 { font-size: 22px; margin: 0 0 4px; }
+
+/* 로그인 화면 */
+.admin-login { max-width: 360px; margin: 40px auto 0; }
+.admin-login form { margin-top: 16px; }
+.admin-login label { display: block; margin: 14px 0 6px; font-size: 15px; font-weight: 700; }
+.admin-login input {
+  width: 100%; min-height: 50px; padding: 0 14px;
+  border: 1.5px solid #c5ccd4; border-radius: 12px; font-size: 16px; font-family: inherit;
+}
+.admin-login input:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+.admin-login .primary { margin-top: 16px; }
+
+/* 상단 */
+.admin-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.admin-header-user { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.admin-header-user .check-btn { min-height: 40px; padding: 0 14px; }
+
+/* 탭 */
+.admin-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.admin-tab {
+  min-height: 44px; padding: 0 16px; border: 1.5px solid #c5ccd4; border-radius: 22px;
+  background: #fff; color: #444; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+}
+.admin-tab.active { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+
+/* 목록 */
+.admin-list { display: flex; flex-direction: column; gap: 12px; }
+.admin-row {
+  display: flex; gap: 14px; padding: 14px; border: 1px solid #eceff2; border-radius: 12px;
+  flex-wrap: wrap;
+}
+.admin-photos { display: flex; gap: 6px; flex: 0 0 auto; }
+.admin-photos img {
+  width: 84px; height: 84px; border-radius: 8px; object-fit: cover; background: #f1f3f5;
+}
+.admin-nophoto {
+  width: 84px; height: 84px; border-radius: 8px; background: #f1f3f5;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6b7785;
+}
+.admin-row-body { flex: 1; min-width: 200px; }
+.admin-row-top { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.admin-desc { font-size: 14px; color: #333; margin: 4px 0; word-break: break-word; }
+
+.admin-actions { flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-start; }
+.admin-approve, .admin-reject {
+  min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px;
+  font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; font-family: inherit;
+}
+.admin-approve { background: #2e9e5b; }
+.admin-approve:active { background: #217d45; }
+.admin-reject { background: #c62828; }
+.admin-reject:active { background: #a11f1f; }
+.admin-approve:disabled, .admin-reject:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 480px) {
+  .admin-row { flex-direction: column; }
+  .admin-actions { width: 100%; }
+  .admin-approve, .admin-reject { flex: 1; }
+}

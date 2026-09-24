@@ -1,5 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
+
+// 업로드 사진 저장 폴더 (upload.js와 동일 규칙)
+const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
 
 const STATUSES = ['pending', 'approved', 'rejected', 'duplicate'];
 const ACCESSIBILITY_STATUSES = ['passable', 'inconvenient', 'impassable'];
@@ -279,6 +284,53 @@ async function updateReportStatus(req, res) {
   }
 }
 
+/**
+ * DELETE /api/reports/:id
+ * 관리자 전용: 제보 완전 삭제 (하드 삭제)
+ *
+ * - report_tags / report_images / report_flags / report_change_reports 는
+ *   외래키 ON DELETE CASCADE로 함께 삭제됨
+ * - 단, uploads/ 폴더의 실제 사진 파일은 DB만으로는 지워지지 않으므로
+ *   삭제 전에 파일명을 조회해 두었다가 직접 unlink 한다.
+ * - 승인되어 지급된 포인트는 회수하지 않는다(현행 정책 유지).
+ */
+async function deleteReport(req, res) {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) {
+    return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    const { rows: exists } = await client.query('SELECT id FROM reports WHERE id = $1', [id]);
+    if (exists.length === 0) {
+      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+    }
+
+    // 삭제 전에 물리 파일명 확보
+    const { rows: images } = await client.query(
+      'SELECT filename FROM report_images WHERE report_id = $1',
+      [id]
+    );
+
+    // reports 삭제 → 연관 테이블 CASCADE 삭제
+    await client.query('DELETE FROM reports WHERE id = $1', [id]);
+
+    // DB에서 지운 뒤 실제 사진 파일 삭제 (실패해도 요청은 성공 처리)
+    for (const img of images) {
+      if (!img.filename) continue;
+      fs.unlink(path.join(UPLOAD_DIR, img.filename), () => {});
+    }
+
+    return res.json({ message: '제보를 삭제했습니다.', deleted_id: id });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: '서버 오류' });
+  } finally {
+    client.release();
+  }
+}
+
 // ------------------------------------------------------------
 // 내부 유틸
 // ------------------------------------------------------------
@@ -321,4 +373,4 @@ function parseTagIds(raw) {
     .filter(v => !Number.isNaN(v));
 }
 
-module.exports = { createReport, listReports, listMyReports, getReport, updateReportStatus };
+module.exports = { createReport, listReports, listMyReports, getReport, updateReportStatus, deleteReport };

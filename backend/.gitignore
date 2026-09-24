@@ -1,4 +1,19 @@
+# 의존성
 node_modules/
+
+# 환경변수 (DB 비밀번호·JWT 시크릿 포함 — 절대 커밋 금지)
 .env
+backend/.env
+
+# 업로드된 제보 사진 (폴더 구조만 유지)
 uploads/*
 !uploads/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# 로그·OS·에디터 부산물
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

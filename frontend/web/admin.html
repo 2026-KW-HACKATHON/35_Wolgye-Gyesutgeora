@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>월계동행 관리자</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+<div id="adminApp">
+
+  <!-- 로그인 전 화면 -->
+  <div id="adminLogin" class="admin-login">
+    <h1>월계동행 관리자</h1>
+    <p class="sheet-note small">관리자(admin) 권한이 있는 계정으로 로그인하세요.</p>
+    <form id="adminLoginForm" novalidate>
+      <label for="adminUsername">아이디</label>
+      <input id="adminUsername" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <label for="adminPassword">비밀번호</label>
+      <input id="adminPassword" name="password" type="password" autocomplete="current-password">
+      <div class="field-msg" id="adminLoginMsg" role="alert"></div>
+      <button class="primary" type="submit">로그인</button>
+    </form>
+  </div>
+
+  <!-- 로그인 후 화면 -->
+  <div id="adminMain" class="admin-main" hidden>
+    <header class="admin-header">
+      <h1>월계동행 관리자</h1>
+      <div class="admin-header-user">
+        <span id="adminName"></span>
+        <button id="adminLogoutBtn" class="check-btn" type="button">로그아웃</button>
+      </div>
+    </header>
+
+    <nav class="admin-tabs" id="adminTabs">
+      <button class="admin-tab active" data-status="pending" type="button">검토 중</button>
+      <button class="admin-tab" data-status="approved" type="button">승인됨</button>
+      <button class="admin-tab" data-status="rejected" type="button">반려됨</button>
+      <button class="admin-tab" data-status="" type="button">전체</button>
+    </nav>
+
+    <div class="field-msg" id="adminMsg" role="alert"></div>
+    <div id="adminList" class="admin-list"></div>
+  </div>
+
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
