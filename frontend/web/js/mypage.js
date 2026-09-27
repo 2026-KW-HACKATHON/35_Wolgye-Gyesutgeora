@@ -104,6 +104,7 @@ function closeMypage() {
 document.getElementById('mypageBtn').addEventListener('click', openMypage);
 document.getElementById('mypageClose').addEventListener('click', closeMypage);
 mypageSheet.addEventListener('click', e => { if (e.target === mypageSheet) closeMypage(); });
+// 포인트 내역(pointSheet, js/points.js)이 위에 열려 있으면 Esc는 그 창만 닫습니다
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !mypageSheet.hidden) closeMypage();
+  if (e.key === 'Escape' && !mypageSheet.hidden && document.getElementById('pointSheet').hidden) closeMypage();
 });

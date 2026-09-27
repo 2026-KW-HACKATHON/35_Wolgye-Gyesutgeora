@@ -1,4 +1,4 @@
-// 제보 등록 창 (사진, 현재 위치, 태그, 설명) + 제보 완료 화면
+// 제보 등록 창 (사진, 위치[현재 위치 또는 지도에서 직접 선택], 통행 상태, 태그, 설명) + 제보 완료 화면
 
 const MAX_PHOTOS = 3;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;                  // 서버 제한과 같음 (10MB)
@@ -176,25 +176,45 @@ async function showAddress(lat, lng) {
   } catch (e) { /* 주소를 못 가져와도 지도로 확인할 수 있어서 조용히 넘어감 */ }
 }
 
+// 위치를 정하는 방법은 두 가지입니다: 현재 위치(GPS) 또는 지도에서 직접 선택(js/pick.js)
+// 늦게 도착한 GPS 결과가, 그 사이 직접 고른 위치를 덮어쓰지 않도록 번호로 구분합니다.
+let gpsRequestId = 0;
+
 function requestLocation() {
+  const myId = ++gpsRequestId;
   position = null;
   addressRequestId++;
   setReportMsg('locMsg', '');
+  document.getElementById('locRetry').textContent = '다시 확인';
   if (!navigator.geolocation) {
-    setLocation('err', '이 브라우저에서는 위치를 확인할 수 없어요.');
+    setLocation('err', '이 브라우저에서는 위치를 확인할 수 없어요. 아래 "지도에서 직접 위치 선택"을 눌러 주세요.');
     return;
   }
   setLocation('loading', '현재 위치를 확인하고 있어요…');
   navigator.geolocation.getCurrentPosition(pos => {
+    if (myId !== gpsRequestId) return;   // 그 사이 위치를 직접 골랐거나 다시 확인했다면 이 결과는 버림
     position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     setLocation('ok', '현재 위치를 확인했어요');
     showMiniMap(position.lat, position.lng, pos.coords.accuracy);
     showAddress(position.lat, position.lng);
   }, err => {
+    if (myId !== gpsRequestId) return;
     setLocation('err', err.code === 1
-      ? '위치 권한이 꺼져 있어요. 주소창의 자물쇠 아이콘에서 위치를 허용한 뒤 "다시 확인"을 눌러 주세요.'
-      : '현재 위치를 확인하지 못했어요. "다시 확인"을 눌러 주세요.');
+      ? '위치 권한이 꺼져 있어요. 허용한 뒤 "다시 확인"을 누르거나, 아래에서 지도로 직접 선택해 주세요.'
+      : '현재 위치를 확인하지 못했어요. "다시 확인"을 누르거나, 아래에서 지도로 직접 선택해 주세요.');
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+
+// 지도에서 직접 고른 위치를 제보 위치로 정합니다 (js/pick.js에서 부름)
+function setManualPosition(lat, lng) {
+  gpsRequestId++;        // 진행 중이던 GPS 확인 결과는 버립니다
+  addressRequestId++;
+  position = { lat, lng };
+  setReportMsg('locMsg', '');
+  setLocation('ok', '지도에서 직접 선택한 위치예요');
+  document.getElementById('locRetry').textContent = '현재 위치로';   // 누르면 다시 GPS 현재 위치를 씁니다
+  showMiniMap(lat, lng, 0);
+  showAddress(lat, lng);
 }
 
 // ----- 통행 상태 (하나만 선택) -----
@@ -323,7 +343,7 @@ async function submitReport() {
   clearReportMsgs();
   let bad = false;
   if (photos.length === 0) { setReportMsg('photoMsg', '사진을 1장 이상 올려 주세요.', 'err'); bad = true; }
-  if (!position) { setReportMsg('locMsg', '현재 위치를 확인한 뒤에 등록할 수 있어요.', 'err'); bad = true; }
+  if (!position) { setReportMsg('locMsg', '위치를 정해 주세요. 현재 위치를 확인하거나 지도에서 직접 선택할 수 있어요.', 'err'); bad = true; }
   if (statusTags().length > 0 && !selectedStatus) { setReportMsg('statusMsg', '통행 상태를 선택해 주세요.', 'err'); bad = true; }
   if (selectedTags.size === 0) { setReportMsg('tagMsg', '어떤 불편인지 1개 이상 선택해 주세요.', 'err'); bad = true; }
   if (bad) return;
@@ -365,7 +385,8 @@ async function submitReport() {
 document.getElementById('reportClose').addEventListener('click', () => closeReport(false));
 reportSheet.addEventListener('click', e => { if (e.target === reportSheet) closeReport(false); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !reportSheet.hidden && authSheet.hidden) closeReport(false);
+  // 위치 선택 화면(pickSheet)이나 로그인 창이 위에 열려 있으면 Esc는 그 창만 닫습니다
+  if (e.key === 'Escape' && !reportSheet.hidden && authSheet.hidden && document.getElementById('pickSheet').hidden) closeReport(false);
 });
 
 document.getElementById('photoAdd').addEventListener('click', () => photoInput.click());

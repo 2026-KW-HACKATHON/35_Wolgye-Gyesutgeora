@@ -52,7 +52,7 @@ function errorMessage(err) {
   if (err.code === 'OUT_OF_REGION') {
     const d = err.data || {};
     let text = '월계1동 안에서만 제보할 수 있어요.';
-    if (d.distance_km != null) text += ' 지금 위치는 월계1동 중심에서 약 ' + d.distance_km + 'km 떨어져 있어요.';
+    if (d.distance_km != null) text += ' 이 위치는 월계1동 중심에서 약 ' + d.distance_km + 'km 떨어져 있어요.';
     if (d.allowed_radius_km != null) text += ' (제보 가능 반경 ' + d.allowed_radius_km + 'km)';
     return text;
   }
@@ -89,6 +89,50 @@ async function createReport(formData) {
 // 내가 등록한 제보 목록 (로그인 필요): [{ id, title, description, accessibility_status, status, tags, images, created_at }]
 async function fetchMyReports() {
   return (await apiRequest('/api/reports/mine', { headers: authHeader() })).reports;
+}
+
+// 내 포인트 내역: { fromReports, entries: [{ type: 'earn'|'use', amount, reason, reportTitle, date }] } (최신순)
+//
+// 1) 백엔드에 전용 API(GET /api/points/history)가 생기면 그걸 씁니다.
+//    기대하는 형태: { history: [{ id, type: 'earn'|'use', amount, reason, report_id, report_title, created_at }] }
+// 2) 아직 없으면(404) 내 "승인된 제보"의 상세에서 실제 지급 정보(point_awarded, points_amount)를 모아 만듭니다.
+//    ※ 제보 상세 API(GET /api/reports/:id)는 호출할 때마다 조회수(view_count)가 1 올라갑니다.
+//      (조회수는 화면 어디에도 쓰지 않지만, 전용 API가 생기기 전까지의 임시 방법입니다)
+const POINT_REASON_LABEL = { report_approved: '제보 승인', report_approval: '제보 승인' };
+
+async function fetchPointHistory() {
+  try {
+    const data = await apiRequest('/api/points/history', { headers: authHeader() });
+    const entries = (data.history || []).map(h => ({
+      type: h.type === 'use' ? 'use' : 'earn',
+      amount: Math.abs(Number(h.amount) || 0),
+      reason: POINT_REASON_LABEL[h.reason] || h.reason || (h.type === 'use' ? '포인트 사용' : '포인트 지급'),
+      reportTitle: h.report_title || '',
+      date: h.created_at
+    }));
+    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return { fromReports: false, entries };
+  } catch (err) {
+    if (err.status !== 404) throw err;   // 404(API 없음)일 때만 임시 방법으로 넘어갑니다
+  }
+
+  const mine = await fetchMyReports();
+  const approved = mine.filter(r => r.status === 'approved');
+  const details = await Promise.allSettled(
+    approved.map(r => apiRequest('/api/reports/' + r.id).then(d => d.report))
+  );
+  const entries = details
+    .filter(d => d.status === 'fulfilled' && d.value.point_awarded && d.value.points_amount > 0)
+    .map(d => ({
+      type: 'earn',
+      amount: d.value.points_amount,
+      reason: '제보 승인',
+      reportTitle: d.value.title || '',
+      date: d.value.updated_at || d.value.created_at,
+      tags: d.value.tags
+    }));
+  entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { fromReports: true, entries };
 }
 
 // ----- 로그인·회원가입 -----

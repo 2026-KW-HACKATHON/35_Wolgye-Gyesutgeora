@@ -18,6 +18,15 @@
       <button id="authBtn" class="auth-btn" type="button">로그인</button>
     </div>
   </div>
+  <!-- 검색란: 제보 검색 + 장소 검색 -->
+  <div class="search-wrap" id="searchWrap">
+    <form id="searchForm" class="search-form" role="search" novalidate>
+      <input id="searchInput" type="text" placeholder="제보·장소 검색 (예: 계단, 월계역)" autocomplete="off" enterkeyhint="search" aria-label="제보 또는 장소 검색">
+      <button id="searchClear" class="search-clear" type="button" aria-label="검색어 지우기" hidden>✕</button>
+    </form>
+    <div class="search-results" id="searchResults" hidden></div>
+  </div>
+
   <div class="legend">
     <div><i style="background:#f57c00"></i>물리적 장애</div>
     <div><i style="background:#fbc02d"></i>임시 장애물</div>
@@ -37,11 +46,54 @@
         <div class="points-label">내 포인트</div>
         <div class="points-value" id="mypagePoints">0<span>P</span></div>
         <p class="sheet-note small">제보가 승인되면 포인트가 지급돼요. 앞으로 지역 상점 혜택으로 쓸 수 있어요.</p>
+        <button class="points-more" id="pointsMoreBtn" type="button">포인트 내역 보기 ›</button>
       </div>
 
       <div class="section-title">내 제보</div>
       <div class="field-msg" id="mypageMsg" role="alert"></div>
       <div id="mypageList"></div>
+    </div>
+  </div>
+
+  <!-- 포인트 내역 (마이페이지 위에 겹쳐서 열림) -->
+  <div class="sheet-backdrop" id="pointSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="포인트 내역">
+      <button class="sheet-close" id="pointClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">포인트 내역</h2>
+
+      <div class="points-card">
+        <div class="points-label">현재 포인트</div>
+        <div class="points-value" id="pointNow">0<span>P</span></div>
+        <div class="points-sum" id="pointSum"></div>
+      </div>
+
+      <p class="sheet-note small" id="pointNote" hidden></p>
+      <div class="field-msg" id="pointMsg" role="alert"></div>
+
+      <div class="section-title">획득 내역</div>
+      <div id="pointEarnList"></div>
+
+      <div class="section-title">사용 내역</div>
+      <div id="pointUseList"></div>
+    </div>
+  </div>
+
+  <!-- 제보 위치 직접 선택 (전체 화면 지도, 제보 창 위에 겹쳐서 열림) -->
+  <div class="pick-overlay" id="pickSheet" role="dialog" aria-modal="true" aria-label="제보할 위치 선택" hidden>
+    <div id="pickMap"></div>
+    <div class="pick-pin" aria-hidden="true"></div>
+    <div class="pick-top">
+      <button class="pick-back" id="pickCancel" type="button">‹ 취소</button>
+      <div class="pick-title">제보할 위치 선택</div>
+    </div>
+    <div class="pick-search" id="pickSearch">
+      <input id="pickSearchInput" type="text" placeholder="장소로 찾기 (예: 월계역, 광운대)" autocomplete="off" enterkeyhint="search" aria-label="장소 검색">
+      <div class="search-results" id="pickResults" hidden></div>
+    </div>
+    <button class="locate-btn" id="pickLocate" type="button" aria-label="내 위치로 이동">내 위치</button>
+    <div class="pick-bottom">
+      <div class="pick-hint" id="pickHint">지도를 움직여서 빨간 핀이 제보할 곳을 가리키게 해 주세요.</div>
+      <button class="primary" id="pickConfirm" type="button">이 위치로 정하기</button>
     </div>
   </div>
 
@@ -119,6 +171,7 @@
           <span id="locText">현재 위치를 확인하고 있어요…</span>
           <button class="check-btn" id="locRetry" type="button">다시 확인</button>
         </div>
+        <button class="pick-open" id="pickOpen" type="button">🗺 지도에서 직접 위치 선택</button>
         <div id="miniMap" hidden></div>
         <div class="loc-address" id="locAddress" hidden></div>
         <div class="field-msg" id="locMsg" role="alert"></div>
@@ -216,11 +269,15 @@
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/map.js"></script>
+<script src="js/places.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/report.js"></script>
+<script src="js/pick.js"></script>
 <script src="js/filter.js"></script>
 <script src="js/mypage.js"></script>
+<script src="js/points.js"></script>
 <script src="js/flag.js"></script>
+<script src="js/search.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
