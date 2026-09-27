@@ -10,6 +10,7 @@ const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const tagRoutes = require('./routes/tagRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
 // 제보 등록: 1시간 내 20건
+// (신고/변경신고 등 하위 POST 엔드포인트는 제외하고, 제보 생성(POST /api/reports)에만 적용)
 const reportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
@@ -93,7 +95,8 @@ const reportLimiter = rateLimit({
   message: { error: '제보 등록은 1시간에 최대 20건까지 가능합니다.' },
 });
 app.use('/api/reports', (req, res, next) => {
-  if (req.method === 'POST') return reportLimiter(req, res, next);
+  // 이 미들웨어 기준 req.path는 '/api/reports' 이후 경로 → 생성은 정확히 '/'
+  if (req.method === 'POST' && req.path === '/') return reportLimiter(req, res, next);
   next();
 });
 
@@ -112,6 +115,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/tags', tagRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ── 프론트엔드 정적 파일 서빙 (웹 배포) ──────────────────────────────────
 // FRONTEND_DIR 환경변수로 경로 변경 가능. 기본값: ../frontend/web
