@@ -70,6 +70,7 @@ loginForm.addEventListener('submit', async e => {
       saveAdminSession(token, user);
       showMain(user);
       loadReports();
+      refreshModBadge();
     } catch (err) {
       setLoginMsg(errorMessage(err));
     }
@@ -85,6 +86,8 @@ document.getElementById('adminLogoutBtn').addEventListener('click', () => {
 
 let currentStatus = 'pending';
 let tagLabel = {};   // code -> label (팝업/목록 표시용)
+let currentReports = [];   // 지금 탭에서 서버로부터 받아온 전체 목록 (검색은 이 목록 안에서 클라이언트가 걸러냄)
+let reportSearchQuery = '';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -97,6 +100,7 @@ const REVIEW_LABEL = { pending: '검토 중', approved: '승인됨', rejected: '
 function reportRow(r) {
   const row = document.createElement('div');
   row.className = 'admin-row';
+  row.dataset.reportId = r.id;   // 신고 관리 탭에서 "이 제보 검토하러 가기"로 찾아올 때 씀
 
   const photos = document.createElement('div');
   photos.className = 'admin-photos';
@@ -173,15 +177,71 @@ function reportRow(r) {
     reject.addEventListener('click', () => changeStatus(r, 'rejected', row));
     actions.appendChild(reject);
   }
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'admin-delete';
+  del.textContent = '삭제';
+  del.addEventListener('click', () => deleteReport(r, row));
+  actions.appendChild(del);
   row.appendChild(actions);
 
   return row;
 }
 
-async function loadReports() {
-  setListMsg('불러오는 중…', '');
+// 제보 하나를 검색용 글자 하나로 합칩니다 (소문자) — 주민용 검색(js/search.js)과 같은 방식
+function reportHaystack(r) {
+  const parts = [r.title, r.description, r.reporter_nickname];
+  if (r.accessibility_status) parts.push(tagLabel[r.accessibility_status] || r.accessibility_status);
+  r.tags.forEach(c => parts.push(tagLabel[c] || c));
+  return parts.filter(Boolean).join(' ').toLowerCase();
+}
+
+// 띄어쓰기로 나눈 검색어가 "모두" 들어 있어야 일치
+function matchesReportSearch(r, q) {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const h = reportHaystack(r);
+  return terms.every(t => h.includes(t));
+}
+
+// currentReports(서버에서 받아온 지금 탭의 전체 목록)를 검색어로 걸러 화면에 다시 그립니다.
+// 새로 서버에 요청하지 않으므로, 승인/반려/삭제 뒤에도 이 함수만 다시 부르면 됩니다.
+function renderReportList(msgOverride) {
   const list = document.getElementById('adminList');
   list.textContent = '';
+  const filtered = currentReports.filter(r => matchesReportSearch(r, reportSearchQuery));
+  if (msgOverride) {
+    setListMsg(msgOverride[0], msgOverride[1]);
+  } else if (currentReports.length === 0) {
+    setListMsg('해당하는 제보가 없어요.', 'ok');
+  } else if (filtered.length === 0) {
+    setListMsg('검색 결과가 없어요.', 'ok');
+  } else {
+    setListMsg('');
+  }
+  filtered.forEach(r => list.appendChild(reportRow(r)));
+}
+
+// 제보를 완전히 삭제합니다 (사진 파일까지, 되돌릴 수 없음)
+async function deleteReport(report, row) {
+  const label = report.title || (report.tags || []).map(c => tagLabel[c] || c).join(', ') || '이 제보';
+  if (!confirm('"' + label + '"를 정말 삭제할까요?\n사진까지 함께 지워지고, 되돌릴 수 없어요.')) return;
+
+  const buttons = row.querySelectorAll('.admin-actions button');
+  buttons.forEach(b => b.disabled = true);
+  try {
+    await apiRequest('/api/reports/' + report.id, { method: 'DELETE', headers: adminAuthHeader() });
+    currentReports = currentReports.filter(r => r.id !== report.id);
+    renderReportList(['삭제했어요.', 'ok']);
+  } catch (err) {
+    buttons.forEach(b => b.disabled = false);
+    setListMsg(errorMessage(err));
+  }
+}
+
+async function loadReports() {
+  setListMsg('불러오는 중…', '');
+  document.getElementById('adminList').textContent = '';
   try {
     if (!Object.keys(tagLabel).length) {
       const tags = await fetchTags();
@@ -189,13 +249,8 @@ async function loadReports() {
     }
     const query = currentStatus ? '?status=' + currentStatus : '';
     const data = await apiRequest('/api/reports' + query);
-    const reports = data.reports;
-    setListMsg('');
-    if (reports.length === 0) {
-      setListMsg('해당하는 제보가 없어요.', 'ok');
-      return;
-    }
-    reports.forEach(r => list.appendChild(reportRow(r)));
+    currentReports = data.reports;
+    renderReportList();
   } catch (err) {
     setListMsg(errorMessage(err));
   }
@@ -214,31 +269,379 @@ async function changeStatus(report, status, row) {
       headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
-    // 목록에서 걸러지는 탭이면 사라지고, 아니면 배지만 갱신
+    // 목록에서 걸러지는 탭이면 목록에서 빼고, 아니면 내용을 갱신
     if (currentStatus && currentStatus !== status) {
-      row.remove();
-      if (!document.getElementById('adminList').children.length) setListMsg('해당하는 제보가 없어요.', 'ok');
+      currentReports = currentReports.filter(r => r.id !== report.id);
     } else {
-      row.replaceWith(reportRow(res.report));
+      currentReports = currentReports.map(r => r.id === res.report.id ? res.report : r);
     }
     const pointsMsg = res.points_awarded ? (' (포인트 ' + res.points_awarded + '점 지급)') : '';
-    setListMsg((status === 'approved' ? '승인했어요.' : '반려했어요.') + pointsMsg, 'ok');
+    renderReportList([(status === 'approved' ? '승인했어요.' : '반려했어요.') + pointsMsg, 'ok']);
   } catch (err) {
     buttons.forEach(b => b.disabled = false);
     setListMsg(errorMessage(err));
   }
 }
 
+document.getElementById('adminSearch').addEventListener('input', e => {
+  reportSearchQuery = e.target.value;
+  document.getElementById('adminSearchClear').hidden = reportSearchQuery === '';
+  renderReportList();
+});
+document.getElementById('adminSearchClear').addEventListener('click', () => {
+  const input = document.getElementById('adminSearch');
+  input.value = '';
+  reportSearchQuery = '';
+  document.getElementById('adminSearchClear').hidden = true;
+  renderReportList();
+  input.focus();
+});
+
 document.getElementById('adminTabs').addEventListener('click', e => {
   const btn = e.target.closest('.admin-tab');
   if (!btn) return;
-  document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('#adminTabs .admin-tab').forEach(b => b.classList.toggle('active', b === btn));
   currentStatus = btn.dataset.status;
   loadReports();
 });
 
 // apiRequest는 authHeader()(주민 로그인 토큰)를 자동으로 붙이지 않으므로,
 // 목록 조회(인증 불필요)는 그대로 두고 상태 변경(changeStatus)에서만 관리자 토큰을 직접 붙입니다.
+
+// ----- 큰 섹션 전환: 제보 검토 / 신고 관리 -----
+
+function switchSection(section) {
+  document.querySelectorAll('#adminSectionTabs .admin-tab').forEach(b => b.classList.toggle('active', b.dataset.section === section));
+  document.getElementById('reportsView').hidden = section !== 'reports';
+  document.getElementById('moderationView').hidden = section !== 'moderation';
+  if (section === 'moderation' && !modLoadedOnce) { modLoadedOnce = true; renderModStatusTabs(); loadModeration(); }
+}
+
+document.getElementById('adminSectionTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.admin-tab');
+  if (!btn) return;
+  switchSection(btn.dataset.section);
+});
+
+// 신고 카드의 "이 제보 검토하러 가기"에서 호출: 제보 검토 탭(전체)으로 이동해 해당 제보를 찾아 강조합니다
+async function goToReport(reportId) {
+  switchSection('reports');
+  currentStatus = '';
+  document.querySelectorAll('#adminTabs .admin-tab').forEach(b => b.classList.toggle('active', b.dataset.status === ''));
+  await loadReports();
+  const row = document.querySelector('#adminList .admin-row[data-report-id="' + reportId + '"]');
+  if (!row) { setListMsg('그 제보를 찾을 수 없어요. 이미 삭제됐을 수 있어요.'); return; }
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('admin-row-highlight');
+  setTimeout(() => row.classList.remove('admin-row-highlight'), 2500);
+}
+
+// ----- 신고 관리: 잘못된 정보 신고 / 정보 변경 신고 -----
+
+const FLAG_REASON_LABEL = { bad_photo: '부적절한 사진', wrong_info: '실제와 다른 정보', duplicate: '중복된 제보', etc: '기타' };
+const CHANGE_REASON_LABEL = {
+  obstacle_removed: '장애물 제거됨', construction_done: '공사 종료', now_passable: '통행 가능해짐',
+  now_impassable: '통행 불가로 변경됨', info_different: '정보가 다름', etc: '기타'
+};
+const FLAG_STATUS_TABS = [['open', '대기 중'], ['resolved', '처리 완료'], ['dismissed', '기각됨'], ['', '전체']];
+const CHANGE_STATUS_TABS = [['open', '대기 중'], ['accepted', '반영됨'], ['dismissed', '기각됨'], ['', '전체']];
+const MOD_REVIEW_LABEL = { open: '대기 중', resolved: '처리 완료', dismissed: '기각됨', accepted: '반영됨' };
+
+let currentModType = 'flags';    // 'flags' | 'change'
+let currentModStatus = 'open';
+let modLoadedOnce = false;
+
+function renderModStatusTabs() {
+  const tabs = currentModType === 'flags' ? FLAG_STATUS_TABS : CHANGE_STATUS_TABS;
+  const box = document.getElementById('modStatusTabs');
+  box.textContent = '';
+  tabs.forEach(([value, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'admin-tab' + (value === currentModStatus ? ' active' : '');
+    b.textContent = label;
+    b.addEventListener('click', () => {
+      currentModStatus = value;
+      document.querySelectorAll('#modStatusTabs .admin-tab').forEach(x => x.classList.toggle('active', x === b));
+      loadModeration();
+    });
+    box.appendChild(b);
+  });
+}
+
+document.getElementById('modTypeTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.admin-tab');
+  if (!btn) return;
+  document.querySelectorAll('#modTypeTabs .admin-tab').forEach(b => b.classList.toggle('active', b === btn));
+  currentModType = btn.dataset.type;
+  currentModStatus = 'open';
+  renderModStatusTabs();
+  loadModeration();
+});
+
+function setModMsg(text, kind) {
+  const el = document.getElementById('modMsg');
+  el.textContent = text || '';
+  el.className = 'field-msg' + (text ? ' ' + (kind || 'err') : '');
+}
+
+// 작은 사진 한 장 (제보 대표 사진). 없으면 "사진 없음".
+function modThumb(url) {
+  const box = document.createElement('div');
+  box.className = 'admin-photos';
+  if (url) {
+    const img = document.createElement('img');
+    img.src = BASE_URL + url;
+    img.alt = '제보 사진';
+    img.addEventListener('error', () => img.remove());
+    box.appendChild(img);
+  } else {
+    const span = document.createElement('span');
+    span.className = 'admin-nophoto';
+    span.textContent = '사진 없음';
+    box.appendChild(span);
+  }
+  return box;
+}
+
+function flagRow(f) {
+  const row = document.createElement('div');
+  row.className = 'admin-row';
+  row.appendChild(modThumb(f.report_image));
+
+  const body = document.createElement('div');
+  body.className = 'admin-row-body';
+
+  const top = document.createElement('div');
+  top.className = 'admin-row-top';
+  const badge = document.createElement('span');
+  badge.className = 'review-badge ' + (f.status === 'resolved' ? 'approved' : f.status === 'open' ? 'pending' : 'rejected');
+  badge.textContent = MOD_REVIEW_LABEL[f.status] || f.status;
+  top.appendChild(badge);
+  const reportBadge = document.createElement('span');
+  reportBadge.className = 'review-badge ' + (f.report_status === 'approved' ? 'approved' : f.report_status === 'pending' ? 'pending' : 'rejected');
+  reportBadge.textContent = '제보: ' + (REVIEW_LABEL[f.report_status] || f.report_status);
+  top.appendChild(reportBadge);
+  body.appendChild(top);
+
+  const title = document.createElement('div');
+  title.className = 'my-title';
+  title.textContent = FLAG_REASON_LABEL[f.reason] || f.reason;
+  body.appendChild(title);
+
+  if (f.description) {
+    const desc = document.createElement('div');
+    desc.className = 'admin-desc';
+    desc.textContent = f.description;
+    body.appendChild(desc);
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'my-meta';
+  meta.textContent = '신고자 ' + f.flagger_nickname + ' · 제보 "' + (f.report_title || '제목 없음') + '"(' + f.report_owner_nickname + ') · ' + formatDate(f.created_at);
+  body.appendChild(meta);
+  row.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.className = 'admin-actions';
+  if (f.status === 'open') {
+    const resolve = document.createElement('button');
+    resolve.type = 'button';
+    resolve.className = 'admin-approve';
+    resolve.textContent = '처리 완료';
+    resolve.addEventListener('click', () => updateFlag(f, 'resolved', row));
+    actions.appendChild(resolve);
+
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'admin-reject';
+    dismiss.textContent = '기각';
+    dismiss.addEventListener('click', () => updateFlag(f, 'dismissed', row));
+    actions.appendChild(dismiss);
+  }
+  row.appendChild(actions);
+
+  const hint = document.createElement('div');
+  hint.className = 'mod-hint';
+  const hintText = document.createElement('span');
+  hintText.textContent = '신고 처리만으로는 지도에서 안 사라져요. 제보를 반려·삭제하려면 →';
+  hint.appendChild(hintText);
+  const jump = document.createElement('button');
+  jump.type = 'button';
+  jump.className = 'mod-jump';
+  jump.textContent = '이 제보 검토하러 가기';
+  jump.addEventListener('click', () => goToReport(f.report_id));
+  hint.appendChild(jump);
+  row.appendChild(hint);
+
+  return row;
+}
+
+async function updateFlag(f, status, row) {
+  const buttons = row.querySelectorAll('.admin-actions button');
+  buttons.forEach(b => b.disabled = true);
+  try {
+    const res = await apiRequest('/api/admin/flags/' + f.id, {
+      method: 'PATCH',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    if (currentModStatus && currentModStatus !== status) {
+      row.remove();
+      if (!document.getElementById('modList').children.length) setModMsg('해당하는 신고가 없어요.', 'ok');
+    } else {
+      row.replaceWith(flagRow({ ...f, status: res.flag.status }));
+    }
+    setModMsg(status === 'resolved' ? '처리 완료로 표시했어요.' : '기각했어요.', 'ok');
+    refreshModBadge();
+  } catch (err) {
+    buttons.forEach(b => b.disabled = false);
+    setModMsg(errorMessage(err));
+  }
+}
+
+function changeRow(c) {
+  const row = document.createElement('div');
+  row.className = 'admin-row';
+  row.appendChild(modThumb(c.report_image));
+
+  const body = document.createElement('div');
+  body.className = 'admin-row-body';
+
+  const top = document.createElement('div');
+  top.className = 'admin-row-top';
+  const badge = document.createElement('span');
+  badge.className = 'review-badge ' + (c.status === 'accepted' ? 'approved' : c.status === 'open' ? 'pending' : 'rejected');
+  badge.textContent = MOD_REVIEW_LABEL[c.status] || c.status;
+  top.appendChild(badge);
+  if (c.report_accessibility_status) {
+    const s = document.createElement('span');
+    s.className = 'status-badge ' + c.report_accessibility_status;
+    s.textContent = '현재: ' + (tagLabel[c.report_accessibility_status] || c.report_accessibility_status);
+    top.appendChild(s);
+  }
+  body.appendChild(top);
+
+  const title = document.createElement('div');
+  title.className = 'my-title';
+  title.textContent = CHANGE_REASON_LABEL[c.reason] || c.reason;
+  body.appendChild(title);
+
+  if (c.description) {
+    const desc = document.createElement('div');
+    desc.className = 'admin-desc';
+    desc.textContent = c.description;
+    body.appendChild(desc);
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'my-meta';
+  meta.textContent = '신고자 ' + c.reporter_nickname + ' · 제보 "' + (c.report_title || '제목 없음') + '" · ' + formatDate(c.created_at);
+  body.appendChild(meta);
+  row.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.className = 'admin-actions';
+  if (c.status === 'open') {
+    const select = document.createElement('select');
+    select.className = 'mod-select';
+    [['', '통행 상태 변경 없음'], ['passable', '→ 통행 가능'], ['inconvenient', '→ 통행 불편'], ['impassable', '→ 통행 불가']]
+      .forEach(([v, label]) => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = label;
+        select.appendChild(opt);
+      });
+    // 신고 사유와 맞는 통행 상태를 미리 골라 둡니다 (그대로 두거나 바꿀 수 있음)
+    if (c.reason === 'now_passable' || c.reason === 'obstacle_removed' || c.reason === 'construction_done') select.value = 'passable';
+    if (c.reason === 'now_impassable') select.value = 'impassable';
+    actions.appendChild(select);
+
+    const accept = document.createElement('button');
+    accept.type = 'button';
+    accept.className = 'admin-approve';
+    accept.textContent = '반영하기';
+    accept.addEventListener('click', () => reviewChange(c, 'accept', row, select.value || undefined));
+    actions.appendChild(accept);
+
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'admin-reject';
+    dismiss.textContent = '기각';
+    dismiss.addEventListener('click', () => reviewChange(c, 'dismiss', row));
+    actions.appendChild(dismiss);
+  }
+  row.appendChild(actions);
+
+  return row;
+}
+
+async function reviewChange(c, action, row, accessibilityStatus) {
+  const buttons = row.querySelectorAll('.admin-actions button, .admin-actions select');
+  buttons.forEach(b => b.disabled = true);
+  try {
+    const body = { action };
+    if (action === 'accept' && accessibilityStatus) body.accessibility_status = accessibilityStatus;
+    const res = await apiRequest('/api/admin/change-reports/' + c.id, {
+      method: 'PATCH',
+      headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (currentModStatus && currentModStatus !== res.change_report.status) {
+      row.remove();
+      if (!document.getElementById('modList').children.length) setModMsg('해당하는 신고가 없어요.', 'ok');
+    } else {
+      row.replaceWith(changeRow({ ...c, status: res.change_report.status }));
+    }
+    setModMsg(action === 'accept' ? '반영했어요.' : '기각했어요.', 'ok');
+    refreshModBadge();
+  } catch (err) {
+    buttons.forEach(b => b.disabled = false);
+    setModMsg(errorMessage(err));
+  }
+}
+
+async function loadModeration() {
+  setModMsg('불러오는 중…', '');
+  const list = document.getElementById('modList');
+  list.textContent = '';
+  try {
+    if (!Object.keys(tagLabel).length) {
+      const tags = await fetchTags();
+      tags.forEach(t => { tagLabel[t.code] = t.label; });
+    }
+    const query = currentModStatus ? '?status=' + currentModStatus : '';
+    if (currentModType === 'flags') {
+      const data = await apiRequest('/api/admin/flags' + query, { headers: adminAuthHeader() });
+      setModMsg('');
+      if (data.flags.length === 0) { setModMsg('해당하는 신고가 없어요.', 'ok'); return; }
+      data.flags.forEach(f => list.appendChild(flagRow(f)));
+    } else {
+      const data = await apiRequest('/api/admin/change-reports' + query, { headers: adminAuthHeader() });
+      setModMsg('');
+      if (data.change_reports.length === 0) { setModMsg('해당하는 신고가 없어요.', 'ok'); return; }
+      data.change_reports.forEach(c => list.appendChild(changeRow(c)));
+    }
+  } catch (err) {
+    setModMsg(errorMessage(err));
+  }
+}
+
+// 신고 관리 탭에 대기 중(open) 신고 개수를 배지로 보여줍니다. (잘못된 정보 신고 + 정보 변경 신고 합계)
+// 배지가 실패해도 페이지 동작에는 지장이 없어서, 실패하면 조용히 숨깁니다.
+async function refreshModBadge() {
+  const badge = document.getElementById('modBadge');
+  try {
+    const [flagsRes, changeRes] = await Promise.all([
+      apiRequest('/api/admin/flags?status=open', { headers: adminAuthHeader() }),
+      apiRequest('/api/admin/change-reports?status=open', { headers: adminAuthHeader() })
+    ]);
+    const count = flagsRes.flags.length + changeRes.change_reports.length;
+    badge.textContent = String(count);
+    badge.hidden = count === 0;
+  } catch (e) {
+    badge.hidden = true;
+  }
+}
 
 // ----- 시작 -----
 
@@ -247,6 +650,7 @@ document.getElementById('adminTabs').addEventListener('click', e => {
   if (getAdminToken() && user && user.role === 'admin') {
     showMain(user);
     loadReports();
+    refreshModBadge();
   } else {
     showLogin();
   }

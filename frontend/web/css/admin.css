@@ -58,7 +58,7 @@ body.admin-body { align-items: flex-start; }
 .admin-desc { font-size: 14px; color: #333; margin: 4px 0; word-break: break-word; }
 
 .admin-actions { flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-start; }
-.admin-approve, .admin-reject {
+.admin-approve, .admin-reject, .admin-delete {
   min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px;
   font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; font-family: inherit;
 }
@@ -66,10 +66,62 @@ body.admin-body { align-items: flex-start; }
 .admin-approve:active { background: #217d45; }
 .admin-reject { background: #c62828; }
 .admin-reject:active { background: #a11f1f; }
-.admin-approve:disabled, .admin-reject:disabled { opacity: .5; cursor: default; }
+.admin-delete { background: #fff; color: #6b7785; border: 1.5px solid #c5ccd4; }
+.admin-delete:active { background: #f1f3f5; }
+.admin-approve:disabled, .admin-reject:disabled, .admin-delete:disabled { opacity: .5; cursor: default; }
+
+/* 신고 관리: 통행 상태 선택, 안내 문구 */
+.mod-select {
+  min-height: 44px; padding: 0 10px; border: 1.5px solid #c5ccd4; border-radius: 10px;
+  font-size: 14px; font-family: inherit; background: #fff; color: #1f2d3d;
+}
+.mod-hint {
+  flex: 1 0 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eceff2;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 12.5px; color: #8a93a3;
+}
+.mod-jump {
+  min-height: 32px; padding: 0 12px; border: 1.5px solid #2f6fed; border-radius: 16px;
+  background: #fff; color: #2f6fed; font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer;
+}
+.mod-jump:active { background: #eaf1fe; }
+
+/* 신고에서 넘어왔을 때 해당 제보 카드를 잠깐 강조 */
+.admin-row-highlight { animation: admin-row-flash 2.5s ease; }
+@keyframes admin-row-flash {
+  0%, 100% { background: transparent; border-color: #eceff2; }
+  15%, 60% { background: #eaf1fe; border-color: #2f6fed; }
+}
+
+/* 큰 섹션 탭(제보 검토/신고 관리)을 서브 탭과 구분 */
+.admin-section-tabs { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #eceff2; }
+.admin-section-tabs .admin-tab { font-size: 15px; }
+
+/* 신고 관리 탭의 대기 중 신고 개수 배지 */
+.admin-tab-badge {
+  display: inline-block; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px;
+  border-radius: 9px; background: #c62828; color: #fff; font-size: 11px; font-weight: 700;
+  line-height: 18px; text-align: center; vertical-align: middle;
+}
+.admin-section-tabs .admin-tab.active .admin-tab-badge { background: #fff; color: #c62828; }
+
+/* 제보 검토 목록 검색 */
+.admin-search-row { position: relative; margin-bottom: 12px; }
+.admin-search-input {
+  width: 100%; min-height: 44px; padding: 0 40px 0 14px; box-sizing: border-box;
+  border: 1.5px solid #c5ccd4; border-radius: 10px; font-size: 14px; font-family: inherit;
+}
+.admin-search-input:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+.admin-search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border: 0; border-radius: 50%; background: none;
+  color: #8a93a3; font-size: 16px; cursor: pointer;
+}
+.admin-search-clear:active { background: #f1f3f5; }
 
 @media (max-width: 480px) {
   .admin-row { flex-direction: column; }
-  .admin-actions { width: 100%; }
-  .admin-approve, .admin-reject { flex: 1; }
+  .admin-actions { width: 100%; flex-wrap: wrap; }
+  .admin-approve, .admin-reject, .admin-delete { flex: 1; }
+  .mod-select { flex: 1 0 100%; }
 }

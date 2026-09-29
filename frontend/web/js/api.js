@@ -74,6 +74,14 @@ async function fetchReports() {
   return (await apiRequest('/api/reports' + query)).reports;
 }
 
+// 보행환경을 고려한 경로 추천 (⚠️ 백엔드 API 준비 전 — 아직 이 주소가 없어서 404가 나며, 호출한 쪽(js/route.js)이
+// 그 경우를 "화면만 준비됨"으로 안내합니다. API가 생기면 이 함수는 고치지 않아도 바로 동작합니다.)
+// 기대하는 응답: { route: [[lat,lng], ...], warnings: [{ report_id, distance_m, tags, accessibility_status }] }
+async function fetchRoute(fromLat, fromLng, toLat, toLng) {
+  const q = 'from_lat=' + fromLat + '&from_lng=' + fromLng + '&to_lat=' + toLat + '&to_lng=' + toLng;
+  return apiRequest('/api/route?' + q);
+}
+
 // ----- 제보 등록 -----
 
 // formData: latitude, longitude, tag_ids(쉼표 구분), images(1~3장), description(선택)

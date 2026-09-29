@@ -306,6 +306,7 @@ async function openReport() {
   clearReportMsgs();
   reportForm.hidden = false;
   reportDone.hidden = true;
+  document.getElementById('doneCelebrate').hidden = true;
   renderPhotos();
   reportSheet.hidden = false;
   requestLocation();
@@ -337,6 +338,26 @@ function showDone(report) {
   const labels = (report.tags || []).map(c => (tagInfo[c] || {}).label || c);
   document.getElementById('doneSummary').textContent =
     labels.join(', ') + ' · 사진 ' + ((report.images || []).length) + '장';
+
+  document.getElementById('doneCelebrate').hidden = true;   // 몇 번째 제보인지는 잠시 뒤(celebrateNth) 채워짐
+}
+
+// 제보가 이 사람의 몇 번째인지 알려주는 축하 문구. 특별한 숫자(5·10·20·30·50·100)는 조금 더 반갑게 알려줍니다.
+function celebrateText(n) {
+  if (n === 1) return '첫 제보를 남겨주셨어요! 월계 한걸음의 첫걸음을 함께해 주셔서 고마워요.';
+  if ([5, 10, 20, 30, 50, 100].includes(n)) return '🎉 벌써 ' + n + '번째 제보예요! 동네를 위해 정말 애써주고 계세요.';
+  return n + '번째 제보예요. 동네를 위해 애써주고 계세요.';
+}
+
+// 완료 화면이 뜬 뒤 따로(비동기로) 채웁니다. 실패해도 완료 화면 자체엔 지장이 없어서 조용히 넘어갑니다.
+async function celebrateNth() {
+  const el = document.getElementById('doneCelebrate');
+  try {
+    const mine = await fetchMyReports();
+    if (reportDone.hidden) return;   // 그 사이 창을 닫았으면 조용히 그만둠
+    el.textContent = celebrateText(mine.length);
+    el.hidden = false;
+  } catch (e) { /* 실패해도 완료 화면은 그대로 보여줍니다 */ }
 }
 
 async function submitReport() {
@@ -366,6 +387,7 @@ async function submitReport() {
     try {
       const report = await createReport(fd);
       showDone(report);
+      celebrateNth();   // 몇 번째 제보인지는 따로(비동기로) 채웁니다
       // 지도에 새 제보가 바로 보이도록 목록을 다시 불러옵니다 (실패해도 등록은 성공한 상태)
       try { renderReports(await fetchReports()); } catch (e) { /* 무시 */ }
     } catch (err) {
@@ -400,6 +422,29 @@ document.getElementById('locRetry').addEventListener('click', requestLocation);
 reportForm.addEventListener('submit', e => {
   e.preventDefault();
   submitReport();
+});
+
+// 제보 완료 화면의 공유하기: 이웃이 링크를 열면 지도가 바로 이 제보로 이동합니다 (main.js의 focusSharedReportFromUrl)
+document.getElementById('doneShareBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('doneShareMsg');
+  msg.textContent = '';
+  if (!lastReport) return;
+  const url = location.origin + location.pathname + '?report=' + lastReport.id;
+  const title = '월계 한걸음 제보';
+  const text = '월계 한걸음에 새 제보가 올라왔어요. 지도에서 확인해 보세요.';
+
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; /* 취소는 조용히 넘어가고, 그 외 실패는 아래 복사로 대신함 */ }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    msg.textContent = '링크를 복사했어요. 메시지 앱에 붙여넣어 공유해 보세요.';
+    msg.className = 'field-msg ok';
+  } catch (e) {
+    msg.textContent = '공유 링크: ' + url;
+    msg.className = 'field-msg';
+  }
 });
 
 document.getElementById('doneMapBtn').addEventListener('click', () => {
