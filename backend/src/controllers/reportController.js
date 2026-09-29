@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
+const { changeReportStatus, revokeAwardedPoints } = require('../utils/points');
 
 // 업로드 사진 저장 폴더 (upload.js와 동일 규칙)
 const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
@@ -9,9 +10,6 @@ const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads')
 const STATUSES = ['pending', 'approved', 'rejected', 'duplicate'];
 const ACCESSIBILITY_STATUSES = ['passable', 'inconvenient', 'impassable'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// 승인 시 지급할 포인트 (환경변수로 조정 가능, 기본 10)
-const POINTS_PER_APPROVAL = parseInt(process.env.POINTS_PER_APPROVAL || '10');
 
 /**
  * POST /api/reports
@@ -104,13 +102,27 @@ async function createReport(req, res) {
  * 지도에 표시할 제보 목록 조회. 인증/지역 제한 없음
  * (다른 지역에서도 월계1동 지도를 미리 확인할 수 있어야 하므로)
  *
- * query: status (선택) - 생략 시 전체 상태 노출
- *        프론트: GET /api/reports?status=approved 로 승인된 제보만 표시
+ * 공개 범위 (optionalAuth 뒤에서 실행):
+ *   - 비로그인·일반 사용자: 항상 승인(approved)된 제보만. status를 생략하면 approved로 간주하고,
+ *     approved 이외의 status를 요청하면 403.
+ *   - 관리자: query status로 원하는 상태를 조회. 생략하면 전체.
+ *
+ * query: status (선택) - pending | approved | rejected | duplicate
  */
 async function listReports(req, res) {
-  const status = req.query.status;
+  let status = req.query.status;
   if (status && !STATUSES.includes(status)) {
     return res.status(400).json({ error: `status는 ${STATUSES.join(', ')} 중 하나여야 합니다.` });
+  }
+
+  if (req.user?.role !== 'admin') {
+    if (status && status !== 'approved') {
+      return res.status(403).json({
+        error: '승인된 제보만 조회할 수 있습니다.',
+        code: 'FORBIDDEN_STATUS',
+      });
+    }
+    status = 'approved';
   }
 
   try {
@@ -186,7 +198,10 @@ async function listMyReports(req, res) {
 
 /**
  * GET /api/reports/:id
- * 제보 상세 조회. 조회수 증가.
+ * 제보 상세 조회 (optionalAuth 뒤에서 실행).
+ * - 승인된 제보: 누구나 조회, 조회수 증가
+ * - 미승인(pending/rejected/duplicate) 제보: 작성자 본인과 관리자만 조회, 조회수는 올리지 않음
+ *   그 외에는 존재 여부가 드러나지 않도록 404
  */
 async function getReport(req, res) {
   if (!UUID_RE.test(req.params.id)) {
@@ -197,7 +212,16 @@ async function getReport(req, res) {
     if (!report) {
       return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
-    await pool.query('UPDATE reports SET view_count = view_count + 1 WHERE id = $1', [req.params.id]);
+
+    if (report.status !== 'approved') {
+      const isAdmin = req.user?.role === 'admin';
+      const isOwner = !!req.user && req.user.id === report.user_id;
+      if (!isAdmin && !isOwner) {
+        return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+      }
+    } else {
+      await pool.query('UPDATE reports SET view_count = view_count + 1 WHERE id = $1', [req.params.id]);
+    }
     return res.json({ report });
   } catch (err) {
     console.error(err);
@@ -207,14 +231,17 @@ async function getReport(req, res) {
 
 /**
  * PATCH /api/reports/:id/status
- * 관리자 전용: 제보 상태 변경 + 승인 시 포인트 지급
+ * 관리자 전용: 제보 상태 변경 + 승인 시 포인트 지급 / 승인 취소 시 포인트 회수
  *
  * body: { status: 'approved' | 'rejected' | 'duplicate' }
  *
  * 승인(approved) 처리 시:
  *   - reports.point_awarded가 FALSE인 경우에만 포인트 지급 (중복 방지)
- *   - users.points += POINTS_PER_APPROVAL
- *   - reports.point_awarded = TRUE, reports.points_amount = POINTS_PER_APPROVAL
+ *   - users.points += POINTS_PER_APPROVAL, point_transactions에 earn 기록
+ * 승인된 제보를 rejected/duplicate로 바꾸면:
+ *   - 지급된 포인트만큼 users.points 차감(0 미만 불가), point_transactions에 revoke 기록
+ *   - point_awarded를 FALSE로 되돌려 중복 회수를 막고, 다시 승인하면 새로 지급
+ * 실제 처리는 utils/points.js의 changeReportStatus에서 한다.
  */
 async function updateReportStatus(req, res) {
   const { id } = req.params;
@@ -233,39 +260,13 @@ async function updateReportStatus(req, res) {
 
   const client = await pool.connect();
   try {
-    // 현재 제보 조회
-    const { rows: existing } = await client.query(
-      'SELECT id, user_id, status, point_awarded FROM reports WHERE id = $1',
-      [id]
-    );
-    if (existing.length === 0) {
-      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
-    }
-    const report = existing[0];
-
     await client.query('BEGIN');
 
-    // 상태 업데이트
-    await client.query(
-      'UPDATE reports SET status = $1 WHERE id = $2',
-      [status, id]
-    );
-
-    let pointsAwarded = 0;
-
-    // 승인 && 아직 포인트 미지급인 경우에만 포인트 지급
-    if (status === 'approved' && !report.point_awarded) {
-      await client.query(
-        `UPDATE reports
-         SET point_awarded = TRUE, points_amount = $1
-         WHERE id = $2`,
-        [POINTS_PER_APPROVAL, id]
-      );
-      await client.query(
-        'UPDATE users SET points = points + $1 WHERE id = $2',
-        [POINTS_PER_APPROVAL, report.user_id]
-      );
-      pointsAwarded = POINTS_PER_APPROVAL;
+    // 상태 변경 + 포인트 지급/회수 (제보 행을 잠근 채로 처리)
+    const result = await changeReportStatus(client, id, status);
+    if (!result) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
 
     await client.query('COMMIT');
@@ -273,7 +274,8 @@ async function updateReportStatus(req, res) {
     const updated = await getReportById(id);
     return res.json({
       report: updated,
-      ...(pointsAwarded > 0 && { points_awarded: pointsAwarded }),
+      ...(result.pointsAwarded > 0 && { points_awarded: result.pointsAwarded }),
+      ...(result.pointsRevoked > 0 && { points_revoked: result.pointsRevoked }),
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -292,7 +294,8 @@ async function updateReportStatus(req, res) {
  *   외래키 ON DELETE CASCADE로 함께 삭제됨
  * - 단, uploads/ 폴더의 실제 사진 파일은 DB만으로는 지워지지 않으므로
  *   삭제 전에 파일명을 조회해 두었다가 직접 unlink 한다.
- * - 승인되어 지급된 포인트는 회수하지 않는다(현행 정책 유지).
+ * - 승인되어 지급된 포인트는 회수한다(users.points 차감 + point_transactions에 revoke 기록).
+ *   내역은 제보가 삭제돼도 남는다(report_id는 NULL, 제목은 사본 유지).
  */
 async function deleteReport(req, res) {
   const { id } = req.params;
@@ -302,10 +305,19 @@ async function deleteReport(req, res) {
 
   const client = await pool.connect();
   try {
-    const { rows: exists } = await client.query('SELECT id FROM reports WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    // 행을 잠가 동시 승인/삭제와 겹쳐도 포인트가 한 번만 회수되게 한다
+    const { rows: exists } = await client.query(
+      `SELECT id, user_id, title, point_awarded, points_amount
+       FROM reports WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
     if (exists.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
+    const report = exists[0];
 
     // 삭제 전에 물리 파일명 확보
     const { rows: images } = await client.query(
@@ -313,8 +325,15 @@ async function deleteReport(req, res) {
       [id]
     );
 
+    // 지급된 포인트 회수 (기록은 report_id가 NULL로 바뀌어도 남음)
+    const pointsRevoked = report.point_awarded
+      ? await revokeAwardedPoints(client, report, 'report_deleted')
+      : 0;
+
     // reports 삭제 → 연관 테이블 CASCADE 삭제
     await client.query('DELETE FROM reports WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
 
     // DB에서 지운 뒤 실제 사진 파일 삭제 (실패해도 요청은 성공 처리)
     for (const img of images) {
@@ -322,8 +341,13 @@ async function deleteReport(req, res) {
       fs.unlink(path.join(UPLOAD_DIR, img.filename), () => {});
     }
 
-    return res.json({ message: '제보를 삭제했습니다.', deleted_id: id });
+    return res.json({
+      message: '제보를 삭제했습니다.',
+      deleted_id: id,
+      ...(pointsRevoked > 0 && { points_revoked: pointsRevoked }),
+    });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
   } finally {

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { changeReportStatus } = require('../utils/points');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -230,6 +231,7 @@ async function adminListChangeReports(req, res) {
 // }
 // accept 시: 신고를 accepted로 바꾸고, 넘어온 값으로 원본 제보를 갱신.
 //            값을 안 넘겨도 원본 updated_at(최근 확인일)은 새로 찍힘.
+//            status를 넘기면 PATCH /api/reports/:id/status 와 같이 포인트 지급/회수도 함께 처리됨.
 // ------------------------------------------------------------
 async function adminReviewChangeReport(req, res) {
   const { id } = req.params;
@@ -278,25 +280,19 @@ async function adminReviewChangeReport(req, res) {
       );
 
       // 원본 제보 갱신 — 넘어온 값만 반영. updated_at은 트리거로 자동 갱신됨.
-      const sets = [];
-      const params = [];
-      if (accessibility_status) {
-        params.push(accessibility_status);
-        sets.push(`accessibility_status = $${params.length}`);
-      }
-      if (status) {
-        params.push(status);
-        sets.push(`status = $${params.length}`);
-      }
-      // 값이 없어도 최근 확인일(updated_at)만이라도 새로 찍히도록 no-op 업데이트 수행
-      if (sets.length === 0) {
-        sets.push(`updated_at = NOW()`);
-      }
-      params.push(changeReport.report_id);
+      // 통행 상태 반영 (값이 없어도 최근 확인일(updated_at)이 새로 찍히도록 항상 UPDATE 수행)
       await client.query(
-        `UPDATE reports SET ${sets.join(', ')} WHERE id = $${params.length}`,
-        params
+        `UPDATE reports
+         SET accessibility_status = COALESCE($1, accessibility_status), updated_at = NOW()
+         WHERE id = $2`,
+        [accessibility_status || null, changeReport.report_id]
       );
+
+      // 승인 상태 변경은 포인트 지급/회수가 함께 처리되도록 공용 로직을 거친다.
+      // (approved → rejected 등으로 바뀌면 지급된 포인트 회수, 처음 approved가 되면 지급)
+      if (status) {
+        await changeReportStatus(client, changeReport.report_id, status);
+      }
     }
 
     await client.query('COMMIT');

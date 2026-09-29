@@ -26,6 +26,25 @@ function requireAuth(req, res, next) {
 }
 
 /**
+ * 선택적 인증 미들웨어
+ *
+ * 로그인하지 않아도 통과시키되, 유효한 토큰이 있으면 req.user를 채웁니다.
+ * (누구나 볼 수 있지만 작성자·관리자에게는 더 많이 보여주는 조회 API용)
+ * 토큰이 없거나 유효하지 않으면 비로그인 요청으로 취급합니다.
+ */
+function optionalAuth(req, res, next) {
+  const token = extractToken(req);
+  if (token) {
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      // 잘못된/만료된 토큰은 무시하고 비로그인으로 처리
+    }
+  }
+  next();
+}
+
+/**
  * 어드민 전용 미들웨어 (requireAuth 이후 사용)
  */
 function requireAdmin(req, res, next) {
@@ -49,4 +68,4 @@ function extractToken(req) {
   return req.cookies?.access_token ?? null;
 }
 
-module.exports = { requireAuth, requireAdmin };
+module.exports = { requireAuth, requireAdmin, optionalAuth };

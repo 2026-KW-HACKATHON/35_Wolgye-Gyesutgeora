@@ -15,19 +15,20 @@ const {
   createChangeReport,
 } = require('../controllers/moderationController');
 
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, optionalAuth } = require('../middleware/auth');
 const { requireInRegion } = require('../middleware/regionCheck');
 const upload = require('../middleware/upload');
 
 // 지도 조회 - 인증/지역 제한 없음
-// 프론트: GET /api/reports?status=approved 로 승인된 제보만 지도에 표시
-router.get('/', listReports);
+// 비로그인·일반 사용자에게는 승인(approved)된 제보만 보인다.
+// 관리자 토큰이 있으면 ?status= 로 pending/rejected/duplicate 도 조회 가능(생략 시 전체).
+router.get('/', optionalAuth, listReports);
 
-// 내 제보 목록 - 인증 필수
+// 내 제보 목록 - 인증 필수 (내 제보는 상태와 관계없이 모두 보임)
 router.get('/mine', requireAuth, listMyReports);
 
-// 제보 상세
-router.get('/:id', getReport);
+// 제보 상세 - 승인된 제보는 누구나, 미승인 제보는 작성자 본인·관리자만
+router.get('/:id', optionalAuth, getReport);
 
 // 제보 등록 - 인증 필수 + 지역(월계1동) 내에서만 가능 + 사진 최대 3장
 router.post(
@@ -46,11 +47,11 @@ router.post('/:id/flags', requireAuth, createFlag);
 // POST /api/reports/:id/change-report  body: { reason, description? }
 router.post('/:id/change-report', requireAuth, createChangeReport);
 
-// 관리자 전용: 제보 상태 변경 + 승인 시 포인트 자동 지급
+// 관리자 전용: 제보 상태 변경 + 승인 시 포인트 자동 지급, 승인 취소 시 자동 회수
 // PATCH /api/reports/:id/status  body: { status: 'approved' | 'rejected' | 'duplicate' }
 router.patch('/:id/status', requireAuth, requireAdmin, updateReportStatus);
 
-// 관리자 전용: 제보 삭제 (연관 데이터 + 사진 파일까지 삭제)
+// 관리자 전용: 제보 삭제 (연관 데이터 + 사진 파일까지 삭제, 지급된 포인트는 회수)
 // DELETE /api/reports/:id
 router.delete('/:id', requireAuth, requireAdmin, deleteReport);
 

@@ -94,7 +94,10 @@
 - 실패 `400` 사진 없음·태그 없음·없는 태그·사진 4장 이상 / `401` 로그인 안 함
 
 ### 지도용 제보 목록 `GET /api/reports`
-로그인·지역 제한 없음. 선택 쿼리 `status` = `pending` | `approved` | `rejected` | `duplicate` (생략 시 전체)
+로그인·지역 제한 없음. **비로그인·일반 사용자에게는 승인(`approved`)된 제보만 보입니다.**
+- 선택 쿼리 `status` = `pending` | `approved` | `rejected` | `duplicate`
+- 일반 사용자: 생략하면 `approved`로 처리. `approved` 이외의 값을 보내면 `403` `FORBIDDEN_STATUS`
+- 관리자(관리자 토큰을 함께 보낸 경우): 원하는 `status`로 조회, 생략하면 전체
 ```json
 { "reports": [ {
   "id": "uuid", "title": "계단", "description": "입구 계단 5개",
@@ -109,25 +112,85 @@
 - 사진 주소는 `Base URL + images[i]` (예: `http://10.0.2.2:3000/uploads/xxxx.png`)
 
 ### 제보 상세 `GET /api/reports/:id`
-목록 항목과 같은 형태에 `user_id`, `address`, `updated_at`이 추가됩니다. 호출할 때마다 조회수가 1 올라갑니다. 없는 id는 `404`.
+목록 항목과 같은 형태에 `user_id`, `address`, `updated_at`, `point_awarded`, `points_amount`가 추가됩니다.
+- 승인된 제보는 누구나 볼 수 있고, 호출할 때마다 조회수가 1 올라갑니다.
+- 미승인(`pending`·`rejected`·`duplicate`) 제보는 **작성자 본인과 관리자만** 볼 수 있고(토큰 필요), 이때는 조회수가 올라가지 않습니다. 그 외에는 존재 여부가 드러나지 않도록 `404`입니다.
+- 없는 id도 `404`.
 
 ### 내 제보 목록 `GET /api/reports/mine` 🔒
+상태와 관계없이 내가 등록한 제보를 모두 돌려줍니다 (`pending`·`rejected` 포함).
+
+### 잘못된 정보 신고 `POST /api/reports/:id/flags` 🔒
+```json
+{ "reason": "wrong_info", "description": "실제로는 계단이 없어요" }
+```
+- `reason` = `bad_photo` | `wrong_info` | `duplicate` | `etc`, `description`은 선택
+- 성공 `201` → `{ "flag": { "id", "report_id", "reason", "description", "status": "open", "created_at" } }`
+- 같은 사용자가 같은 제보를 다시 신고하면 `409` `ALREADY_FLAGGED`, 잘못된 `reason`은 `400`, 없는 제보는 `404`
+
+### 정보 변경 신고 `POST /api/reports/:id/change-report` 🔒
+"장애물이 치워졌어요" 같이 상황이 바뀐 것을 알립니다.
+```json
+{ "reason": "obstacle_removed", "description": "적치물이 없어졌어요" }
+```
+- `reason` = `obstacle_removed` | `construction_done` | `now_passable` | `now_impassable` | `info_different` | `etc`, `description`은 선택
+- 성공 `201` → `{ "change_report": { "id", "report_id", "reason", "description", "status": "open", "created_at" } }`
+- 잘못된 `reason`은 `400`, 없는 제보는 `404`. 같은 사용자가 여러 번 보낼 수 있습니다.
+
+## 3-2. 관리자 (`role: "admin"` 토큰 필요, 아니면 `403`)
+
+### 제보 승인·반려 `PATCH /api/reports/:id/status` 🔒 관리자
+```json
+{ "status": "approved" }
+```
+- `status` = `approved` | `rejected` | `duplicate` (`pending`으로 되돌리는 것은 불가)
+- 성공 `200` → `{ "report": {...}, "points_awarded": 10, "points_revoked": 10 }` (`points_awarded`·`points_revoked`는 해당될 때만 포함)
+- **승인**하면 작성자에게 포인트를 지급합니다(기본 10점, 서버 환경변수 `POINTS_PER_APPROVAL`). 같은 제보에 중복 지급되지 않습니다.
+- **승인된 제보를 `rejected`·`duplicate`로 바꾸면** 지급했던 포인트를 회수합니다(0점 밑으로는 내려가지 않음). 다시 승인하면 새로 지급되므로 승인·반려를 반복해도 포인트가 늘지 않습니다.
+
+### 제보 삭제 `DELETE /api/reports/:id` 🔒 관리자
+- 태그·사진(파일 포함)·신고 기록을 함께 삭제하고, 승인되어 지급된 포인트가 있으면 회수합니다.
+- 성공 `200` → `{ "message": "제보를 삭제했습니다.", "deleted_id": "uuid", "points_revoked": 10 }` (`points_revoked`는 회수했을 때만 포함)
+- 포인트 내역은 제보가 삭제돼도 남습니다(`report_id`는 `null`, `report_title`은 유지).
+
+### 잘못된 정보 신고 목록·처리
+- `GET /api/admin/flags?status=open|resolved|dismissed` → `{ "flags": [ { id, reason, description, status, created_at, report_id, flagger_nickname, report_title, report_status, report_accessibility_status, report_owner_nickname, report_image } ] }`
+- `PATCH /api/admin/flags/:id` body `{ "status": "resolved" | "dismissed" }` → `{ "flag": {...} }`
+- 신고가 맞으면 제보 자체는 위의 `PATCH /api/reports/:id/status`(반려)나 `DELETE /api/reports/:id`(삭제)로 처리합니다.
+
+### 정보 변경 신고 목록·처리
+- `GET /api/admin/change-reports?status=open|accepted|dismissed` → `{ "change_reports": [ { id, reason, description, status, created_at, report_id, reporter_nickname, report_title, report_status, report_accessibility_status, report_updated_at, report_image } ] }`
+- `PATCH /api/admin/change-reports/:id` body `{ "action": "accept" | "dismiss", "accessibility_status"?, "status"? }` → `{ "change_report": {...} }`
+- `accept`하면 신고가 `accepted`로 바뀌고, 넘긴 값으로 원본 제보를 갱신합니다. 값을 안 넘겨도 원본의 `updated_at`(최근 확인일)은 새로 찍힙니다.
+- `status`를 함께 넘기면 위 승인·반려와 똑같이 포인트 지급·회수가 처리됩니다.
 
 ## 3-1. 포인트
 
 ### 내 포인트 내역 `GET /api/points/history` 🔒
-승인되어 포인트가 지급된 내 제보를 최신순으로 돌려줍니다. 조회수는 올라가지 않습니다.
+내 포인트 지급·회수 기록을 최신순으로 돌려줍니다. 조회수는 올라가지 않습니다.
 ```json
 { "history": [ {
   "id": "uuid", "type": "earn", "amount": 10, "reason": "report_approved",
   "report_id": "uuid", "report_title": "계단", "created_at": "2026-09-20T07:04:53.584Z"
+}, {
+  "id": "uuid", "type": "revoke", "amount": 10, "reason": "approval_cancelled",
+  "report_id": "uuid", "report_title": "계단", "created_at": "2026-09-21T02:10:11.000Z"
 } ] }
 ```
-- 현재는 포인트 사용 기능이 없어 `type`은 항상 `earn`입니다.
-- `created_at`은 제보의 `updated_at`이라, 이후 정보 변경 신고가 반영되면 바뀔 수 있습니다.
+| type | reason | 의미 |
+|---|---|---|
+| `earn` | `report_approved` | 제보가 승인되어 지급 |
+| `revoke` | `approval_cancelled` | 승인됐던 제보가 반려·중복 처리되어 회수 |
+| `revoke` | `report_deleted` | 승인됐던 제보가 삭제되어 회수 |
+
+- `amount`는 항상 양수이고, 늘었는지 줄었는지는 `type`으로 구분합니다. (`earn`은 +, `revoke`는 −)
+- 제보가 삭제된 내역은 `report_id`가 `null`이지만 `report_title`은 남습니다.
+- 현재는 포인트 사용 기능이 없어 `earn`과 `revoke`만 있습니다.
+- 서버가 이 API를 도입하기 전에 이미 지급된 포인트는 `earn` 내역으로 옮겨 담았고, 그 `created_at`은 당시 제보의 `updated_at`입니다.
 
 ## 4. 알아둘 점
 
-- 새 제보는 `status: "pending"`으로 저장되며, 지금은 승인 절차가 없어 목록에 바로 나옵니다.
-- 포인트는 `points` 값만 존재하고 적립 기능은 아직 없습니다(항상 0).
+- 새 제보는 `status: "pending"`으로 저장되며, 관리자가 승인하기 전까지는 지도 목록·상세에 나오지 않습니다(작성자 본인은 `GET /api/reports/mine`과 상세로 볼 수 있습니다).
+- 포인트는 승인 시 지급되고, 승인이 취소(반려·중복 처리)되거나 제보가 삭제되면 회수됩니다. 현재 포인트는 로그인·`GET /api/auth/me`의 `points`로, 지급·회수 기록은 `GET /api/points/history`로 확인합니다.
+- 사진 파일(`/uploads/...`)은 주소(무작위 UUID 파일명)를 알면 누구나 열 수 있습니다. 미승인 제보의 사진 주소는 위 조회 API로는 나오지 않지만, 파일 자체에 로그인 검사를 하지는 않습니다.
 - 위치 판정은 앱이 보낸 좌표를 믿는 방식이라, 위치 조작 앱을 쓰면 서버에서 막을 수 없습니다.
