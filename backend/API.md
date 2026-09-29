@@ -113,6 +113,19 @@
 
 ### 내 제보 목록 `GET /api/reports/mine` 🔒
 
+## 3-1. 포인트
+
+### 내 포인트 내역 `GET /api/points/history` 🔒
+승인되어 포인트가 지급된 내 제보를 최신순으로 돌려줍니다. 조회수는 올라가지 않습니다.
+```json
+{ "history": [ {
+  "id": "uuid", "type": "earn", "amount": 10, "reason": "report_approved",
+  "report_id": "uuid", "report_title": "계단", "created_at": "2026-09-20T07:04:53.584Z"
+} ] }
+```
+- 현재는 포인트 사용 기능이 없어 `type`은 항상 `earn`입니다.
+- `created_at`은 제보의 `updated_at`이라, 이후 정보 변경 신고가 반영되면 바뀔 수 있습니다.
+
 ## 4. 알아둘 점
 
 - 새 제보는 `status: "pending"`으로 저장되며, 지금은 승인 절차가 없어 목록에 바로 나옵니다.
