@@ -125,7 +125,7 @@ function popupContent(r) {
   const changeBtn = document.createElement('button');
   changeBtn.type = 'button';
   changeBtn.className = 'popup-flag';
-  changeBtn.textContent = '상황이 바뀌었어요';
+  changeBtn.textContent = '현장 상황이 바뀌었어요';
   changeBtn.addEventListener('click', () => openChangeReport(r.id));
   box.appendChild(changeBtn);
 

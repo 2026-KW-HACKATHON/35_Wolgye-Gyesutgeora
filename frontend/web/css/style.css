@@ -354,6 +354,22 @@ button:disabled { opacity: .6; cursor: default; }
 .point-amount.use { color: #c62828; }
 .point-empty { padding: 14px 0; font-size: 14px; color: #6b7785; }
 
+/* 지역 상점 (뼈대 화면: 상품은 예시) */
+.store-example-note { color: #a35b00; font-weight: 700; }
+.store-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.store-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 14px; border: 1px solid #eceff2; border-radius: 12px; flex-wrap: wrap;
+}
+.store-item-body { min-width: 0; flex: 1 1 180px; }
+.store-item-shop { font-size: 12.5px; color: #6b7785; font-weight: 700; }
+.store-item-name { font-size: 15px; font-weight: 700; color: #1f2d3d; margin-top: 2px; }
+.store-item-desc { font-size: 13px; color: #6b7785; margin-top: 4px; word-break: keep-all; }
+.store-item-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.store-item-cost { font-size: 16px; font-weight: 800; color: #2f6fed; }
+.store-redeem { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.store-redeem:disabled { border-color: #c5ccd4; color: #9aa3ad; cursor: default; }
+
 .my-card {
   display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eceff2;
 }

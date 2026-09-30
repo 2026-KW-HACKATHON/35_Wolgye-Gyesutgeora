@@ -143,6 +143,20 @@ async function fetchPointHistory() {
   return { fromReports: true, entries };
 }
 
+// ----- 상점 -----
+
+// 포인트로 지역 상점 혜택 교환 (⚠️ 백엔드 API 준비 전 — 아직 이 주소가 없어서 404가 나며,
+// 호출한 쪽(js/store.js)이 그 경우를 "화면만 준비됨"으로 안내합니다. js/flag.js, js/route.js와 같은 방식입니다.
+// 상품 목록 자체도 아직 팀이 정하지 않아서, 지금은 프론트에 예시 상품(STORE_ITEMS, js/store.js)만 있습니다.)
+// 기대하는 응답: { user: { points, ... } }  (교환 뒤 최신 포인트를 그대로 돌려주면 화면에 바로 반영됩니다)
+async function redeemStoreItem(itemId) {
+  return apiRequest('/api/store/redeem', {
+    method: 'POST',
+    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId })
+  });
+}
+
 // ----- 로그인·회원가입 -----
 
 // 아이디·닉네임 중복 확인: { available, message }

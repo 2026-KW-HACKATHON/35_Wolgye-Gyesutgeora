@@ -68,6 +68,7 @@
         <div class="points-label">현재 포인트</div>
         <div class="points-value" id="pointNow">0<span>P</span></div>
         <div class="points-sum" id="pointSum"></div>
+        <button class="points-more" id="storeOpenBtn" type="button">지역 상점 보기 ›</button>
       </div>
 
       <p class="sheet-note small" id="pointNote" hidden></p>
@@ -78,6 +79,23 @@
 
       <div class="section-title">사용 내역</div>
       <div id="pointUseList"></div>
+    </div>
+  </div>
+
+  <!-- 지역 상점 (⚠️ 뼈대만 먼저 만든 화면: 상품은 예시, 포인트 사용 API는 백엔드 준비 전 — js/store.js 참고) -->
+  <div class="sheet-backdrop" id="storeSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="지역 상점">
+      <button class="sheet-close" id="storeClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">지역 상점</h2>
+      <p class="sheet-note small store-example-note">⚠️ 아래 상품은 예시예요. 실제 제휴 상점과 혜택이 정해지면 바뀔 예정이에요.</p>
+
+      <div class="points-card">
+        <div class="points-label">사용 가능한 포인트</div>
+        <div class="points-value" id="storePoints">0<span>P</span></div>
+      </div>
+
+      <div class="field-msg" id="storeMsg" role="alert"></div>
+      <div id="storeList" class="store-list"></div>
     </div>
   </div>
 
@@ -135,7 +153,7 @@
       <button class="sheet-close" id="changeClose" type="button" aria-label="닫기">✕</button>
 
       <form id="changeForm" novalidate>
-        <h2 class="sheet-title">상황이 바뀌었어요</h2>
+        <h2 class="sheet-title">현장 상황이 바뀌었어요</h2>
         <p class="sheet-note small">제보 당시와 지금 상황이 달라졌다면 알려주세요. 관리자가 확인 후 반영할게요.</p>
 
         <div class="section-title">무엇이 바뀌었나요 <span class="hint">(하나만 선택)</span></div>
@@ -349,6 +367,7 @@
 <script src="js/filter.js"></script>
 <script src="js/mypage.js"></script>
 <script src="js/points.js"></script>
+<script src="js/store.js"></script>
 <script src="js/flag.js"></script>
 <script src="js/change.js"></script>
 <script src="js/search.js"></script>
