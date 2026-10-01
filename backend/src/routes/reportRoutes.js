@@ -52,6 +52,10 @@ router.post('/:id/flags', requireAuth, createFlag);
 // POST /api/reports/:id/change-report  body: { reason, description? }
 router.post('/:id/change-report', requireAuth, createChangeReport);
 
+// 관리자 전용: 제보 상태 변경 + 승인 시 포인트 자동 지급, 승인 취소 시 자동 회수
+// PATCH /api/reports/:id/status  body: { status: 'approved' | 'rejected' | 'duplicate' }
+router.patch('/:id/status', requireAuth, requireAdmin, updateReportStatus);
+
 // 관리자 전용: 제보 본문 수정(정보 수정) - 제목·설명·태그·통행 상태
 // PATCH /api/reports/:id  body: { title?, description?, tag_ids?, accessibility_status? }
 router.patch('/:id', requireAuth, requireAdmin, adminUpdateReport);
