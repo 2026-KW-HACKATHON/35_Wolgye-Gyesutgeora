@@ -26,7 +26,8 @@ app.use(
         scriptSrc:   ["'self'", 'cdnjs.cloudflare.com'],
         styleSrc:    ["'self'", "'unsafe-inline'", 'cdnjs.cloudflare.com'],
         imgSrc:      ["'self'", 'data:', '*.tile.openstreetmap.org'],
-        connectSrc:  ["'self'"],
+        // 인터넷 장소 검색(Nominatim)만 외부 접속 허용
+        connectSrc:  ["'self'", 'https://nominatim.openstreetmap.org'],
         fontSrc:     ["'self'"],
         objectSrc:   ["'none'"],
         upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
@@ -66,20 +67,31 @@ app.use(
 app.use(cookieParser(process.env.COOKIE_SECRET || process.env.JWT_SECRET));
 
 // ── 요청 속도 제한 (Rate Limiting) ───────────────────────────────────────
-// 전체 API: 15분 내 100건
+// 한도는 환경변수로 조정합니다(미설정 시 기본값). 전시처럼 한 IP(공용 와이파이)에서
+// 많은 사람이 접속하는 경우 .env / Vercel 환경변수에서 값을 올리세요. .env.example 참고.
+const limitFromEnv = (name, fallback) => {
+  const n = parseInt(process.env[name], 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const API_MAX = limitFromEnv('RATE_LIMIT_API_MAX', 100);
+const AUTH_MAX = limitFromEnv('RATE_LIMIT_AUTH_MAX', 20);
+const REPORT_MAX = limitFromEnv('RATE_LIMIT_REPORT_MAX', 20);
+const CHANGE_REPORT_MAX = limitFromEnv('RATE_LIMIT_CHANGE_REPORT_MAX', 20);
+
+// 전체 API: 15분 내 API_MAX건 (기본 100)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: API_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
 });
 app.use('/api', apiLimiter);
 
-// 인증 관련 엔드포인트: 15분 내 20건 (브루트포스 방어)
+// 인증 관련 엔드포인트: 15분 내 AUTH_MAX건 (기본 20, 브루트포스 방어)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: AUTH_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '인증 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.' },
@@ -87,22 +99,22 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// 제보 등록: 1시간 내 20건
+// 제보 등록: 1시간 내 REPORT_MAX건 (기본 20)
 // (신고/변경신고 등 하위 POST 엔드포인트는 제외하고, 제보 생성(POST /api/reports)에만 적용)
 const reportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 20,
+  max: REPORT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: '제보 등록은 1시간에 최대 20건까지 가능합니다.' },
+  message: { error: `제보 등록은 1시간에 최대 ${REPORT_MAX}건까지 가능합니다.` },
 });
-// 정보 변경 신고(사진 업로드 포함): 1시간 내 20건
+// 정보 변경 신고(사진 업로드 포함): 1시간 내 CHANGE_REPORT_MAX건 (기본 20)
 const changeReportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 20,
+  max: CHANGE_REPORT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: '정보 변경 신고는 1시간에 최대 20건까지 가능합니다.' },
+  message: { error: `정보 변경 신고는 1시간에 최대 ${CHANGE_REPORT_MAX}건까지 가능합니다.` },
 });
 app.use('/api/reports', (req, res, next) => {
   // 이 미들웨어 기준 req.path는 '/api/reports' 이후 경로 → 생성은 정확히 '/'
