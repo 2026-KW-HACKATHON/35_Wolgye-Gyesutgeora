@@ -12,6 +12,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const tagRoutes = require('./routes/tagRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const pointRoutes = require('./routes/pointRoutes');
+const routeRoutes = require('./routes/routeRoutes');
 
 const app = express();
 
@@ -118,6 +119,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/points', pointRoutes);
+app.use('/api/route', routeRoutes);
 
 // ── 프론트엔드 정적 파일 서빙 (웹 배포) ──────────────────────────────────
 // FRONTEND_DIR 환경변수로 경로 변경 가능. 기본값: ../frontend/web

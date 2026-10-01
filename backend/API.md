@@ -113,12 +113,21 @@
 
 ### 제보 상세 `GET /api/reports/:id`
 목록 항목과 같은 형태에 `user_id`, `address`, `updated_at`, `point_awarded`, `points_amount`가 추가됩니다.
-- 승인된 제보는 누구나 볼 수 있고, 호출할 때마다 조회수가 1 올라갑니다.
+- 승인된 제보는 누구나 볼 수 있습니다. 이 API는 조회수를 올리지 않습니다 (조회수는 아래 `POST /api/reports/:id/view`로 집계).
 - 미승인(`pending`·`rejected`·`duplicate`) 제보는 **작성자 본인과 관리자만** 볼 수 있고(토큰 필요), 이때는 조회수가 올라가지 않습니다. 그 외에는 존재 여부가 드러나지 않도록 `404`입니다.
 - 없는 id도 `404`.
 
 ### 내 제보 목록 `GET /api/reports/mine` 🔒
-상태와 관계없이 내가 등록한 제보를 모두 돌려줍니다 (`pending`·`rejected` 포함).
+상태와 관계없이 내가 등록한 제보를 모두 돌려줍니다 (`pending`·`rejected` 포함). 각 항목에 조회수 `view_count`가 포함됩니다.
+
+### 조회수 집계 `POST /api/reports/:id/view`
+지도에서 제보 팝업을 **열 때** 호출합니다. 로그인 불필요(토큰이 있으면 사용자 기준, 없으면 IP 기준).
+```json
+{ "counted": true, "view_count": 13 }
+```
+- 같은 사용자가 같은 제보를 **하루(한국 시간 기준)에 여러 번** 열어도 1회만 반영됩니다. 이미 센 경우 `counted: false`이고 `view_count`는 그대로입니다.
+- 승인(`approved`)된 제보만 집계합니다. 없는 id·미승인 제보는 `404`.
+- 화면 문구는 `view_count`를 "N회 조회됨"처럼 쓰는 것을 권장합니다 (사람 수가 아니라 사용자·일 단위 조회 횟수).
 
 ### 잘못된 정보 신고 `POST /api/reports/:id/flags` 🔒
 ```json
@@ -187,6 +196,40 @@
 - 제보가 삭제된 내역은 `report_id`가 `null`이지만 `report_title`은 남습니다.
 - 현재는 포인트 사용 기능이 없어 `earn`과 `revoke`만 있습니다.
 - 서버가 이 API를 도입하기 전에 이미 지급된 포인트는 `earn` 내역으로 옮겨 담았고, 그 `created_at`은 당시 제보의 `updated_at`입니다.
+
+## 3-2. 경로 주변 경고
+
+### 경로 경고 조회 `GET /api/route`
+로그인 불필요. 경로(선분) 가까이에 있는 **승인(approved)된 제보**를 `warnings`로 돌려줍니다.
+
+| 쿼리 | 필수 | 설명 |
+|---|---|---|
+| from_lat, from_lng, to_lat, to_lng | ✅* | 출발지→도착지 직선 경로 |
+| path | ✅* | `위도,경도;위도,경도;...` 점 2~200개를 잇는 경로. 있으면 from/to보다 우선 |
+| radius_m | | 경로에서 이 거리(m) 이내 제보만 포함. 기본 30, 1~200 |
+| limit | | warnings 최대 개수. 기본 20, 1~50 |
+
+\* from/to 4개 또는 path 중 하나
+
+```json
+{
+  "route": [ [37.6215, 127.0605], [37.6215, 127.063] ],
+  "route_distance_m": 220,
+  "radius_m": 30,
+  "warnings": [ {
+    "report_id": "uuid", "title": "계단", "latitude": 37.6215, "longitude": 127.061,
+    "tags": ["stairs"], "accessibility_status": "inconvenient",
+    "distance_m": 0, "along_m": 44
+  } ],
+  "total_warnings": 1,
+  "truncated": false
+}
+```
+- `warnings`는 경로를 따라가는 순서(`along_m`: 출발지부터의 거리 m)로 정렬됩니다. `distance_m`은 경로에서 떨어진 거리입니다.
+- 조건에 맞는 제보가 `limit`보다 많으면 앞에서부터 `limit`개만 주고 `truncated: true`, 전체 개수는 `total_warnings`로 알려줍니다.
+- 경로의 점 중 하나라도 서비스 지역 밖이면 `403` `OUT_OF_REGION` (`distance_km`, `allowed_radius_km` 함께 반환)
+- 좌표·`radius_m`·`limit` 형식 오류는 `400` `INVALID_ROUTE`
+- 직선 경로 기준이며 실제 보행로를 따라 안내하는 길찾기는 아닙니다 (MVP).
 
 ## 4. 알아둘 점
 

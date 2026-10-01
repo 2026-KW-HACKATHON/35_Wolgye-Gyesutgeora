@@ -6,6 +6,7 @@ const {
   listReports,
   listMyReports,
   getReport,
+  recordView,
   updateReportStatus,
   deleteReport,
 } = require('../controllers/reportController');
@@ -29,6 +30,9 @@ router.get('/mine', requireAuth, listMyReports);
 
 // 제보 상세 - 승인된 제보는 누구나, 미승인 제보는 작성자 본인·관리자만
 router.get('/:id', optionalAuth, getReport);
+
+// 조회수 집계 - 지도 팝업을 열 때 호출. 로그인 불필요(사용자당·제보당 하루 1회만 반영)
+router.post('/:id/view', optionalAuth, recordView);
 
 // 제보 등록 - 인증 필수 + 지역(월계1동) 내에서만 가능 + 사진 최대 3장
 router.post(

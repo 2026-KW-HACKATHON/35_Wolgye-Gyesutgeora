@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
@@ -173,7 +174,7 @@ async function listMyReports(req, res) {
       `SELECT
          r.id, r.title, r.description,
          r.latitude::float8 AS latitude, r.longitude::float8 AS longitude,
-         r.accessibility_status, r.status, r.created_at,
+         r.accessibility_status, r.status, r.view_count, r.created_at,
          COALESCE(
            ARRAY_AGG(DISTINCT t.code) FILTER (WHERE t.code IS NOT NULL), '{}'
          ) AS tags,
@@ -199,8 +200,8 @@ async function listMyReports(req, res) {
 /**
  * GET /api/reports/:id
  * 제보 상세 조회 (optionalAuth 뒤에서 실행).
- * - 승인된 제보: 누구나 조회, 조회수 증가
- * - 미승인(pending/rejected/duplicate) 제보: 작성자 본인과 관리자만 조회, 조회수는 올리지 않음
+ * - 승인된 제보: 누구나 조회 (조회수는 올리지 않음 — 조회수는 POST /api/reports/:id/view 로 집계)
+ * - 미승인(pending/rejected/duplicate) 제보: 작성자 본인과 관리자만 조회
  *   그 외에는 존재 여부가 드러나지 않도록 404
  */
 async function getReport(req, res) {
@@ -219,10 +220,55 @@ async function getReport(req, res) {
       if (!isAdmin && !isOwner) {
         return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
       }
-    } else {
-      await pool.query('UPDATE reports SET view_count = view_count + 1 WHERE id = $1', [req.params.id]);
     }
     return res.json({ report });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: '서버 오류' });
+  }
+}
+
+/**
+ * POST /api/reports/:id/view
+ * 지도 팝업을 열 때 부르는 조회수 집계 API (optionalAuth 뒤에서 실행).
+ * - 같은 사용자(비로그인은 IP)가 같은 제보를 하루(한국 시간 기준)에 여러 번 열어도 1회만 센다.
+ * - 승인된 제보만 센다. 그 외·없는 제보는 404.
+ * 응답: { counted: boolean, view_count: number }
+ */
+async function recordView(req, res) {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) {
+    return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+  }
+  const viewerKey = req.user
+    ? `u:${req.user.id}`
+    : 'ip:' + crypto
+        .createHash('sha256')
+        .update(`${process.env.JWT_SECRET || ''}|${req.ip || ''}`)
+        .digest('hex')
+        .slice(0, 32);
+
+  try {
+    const found = await pool.query(
+      "SELECT view_count FROM reports WHERE id = $1 AND status = 'approved'", [id]
+    );
+    if (found.rows.length === 0) {
+      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO report_views (report_id, viewer_key, view_date)
+       VALUES ($1, $2, (NOW() AT TIME ZONE 'Asia/Seoul')::date)
+       ON CONFLICT DO NOTHING`,
+      [id, viewerKey]
+    );
+    if (ins.rowCount === 0) {
+      return res.json({ counted: false, view_count: found.rows[0].view_count });
+    }
+    const upd = await pool.query(
+      'UPDATE reports SET view_count = view_count + 1 WHERE id = $1 RETURNING view_count', [id]
+    );
+    return res.json({ counted: true, view_count: upd.rows[0].view_count });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
@@ -397,4 +443,4 @@ function parseTagIds(raw) {
     .filter(v => !Number.isNaN(v));
 }
 
-module.exports = { createReport, listReports, listMyReports, getReport, updateReportStatus, deleteReport };
+module.exports = { createReport, listReports, listMyReports, getReport, recordView, updateReportStatus, deleteReport };
