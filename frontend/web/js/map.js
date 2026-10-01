@@ -43,6 +43,21 @@ function markerColor(codes) {
 }
 
 // 서버에서 받은 글자를 화면에 넣을 때는 항상 textContent로 (악성 문자 방지)
+// 팝업 내용을 자연스러운 한 문장으로 엮어서 음성으로 읽기 좋게 만듭니다 (js/tts.js가 실제로 읽어요)
+function popupSpeechText(r) {
+  const parts = [];
+  if (r.accessibility_status) parts.push('통행 상태, ' + ((tagInfo[r.accessibility_status] || {}).label || r.accessibility_status));
+  const typeLabels = r.tags
+    .filter(c => !(r.accessibility_status && (tagInfo[c] || {}).category === 'accessibility'))
+    .map(c => (tagInfo[c] || {}).label || c);
+  if (typeLabels.length) parts.push('불편 유형, ' + typeLabels.join(', '));
+  if (r.description) parts.push('설명, ' + r.description);
+  return parts.join('. ');
+}
+
+// 팝업이 닫히면 읽고 있던 음성도 함께 멈춥니다 (닫은 뒤에도 계속 읽으면 어색해서)
+map.on('popupclose', () => ttsStop());
+
 function popupContent(r) {
   const box = document.createElement('div');
   box.className = 'popup';
@@ -96,7 +111,23 @@ function popupContent(r) {
   const meta = document.createElement('div');
   meta.className = 'meta';
   meta.textContent = formatDate(r.created_at) + ' · ' + r.reporter_nickname;
+  // 조회수는 지도 목록 API(GET /api/reports)에 이미 포함돼 있어 별도 호출 없이 보여줍니다.
+  // (제보 상세 API처럼 조회수를 올리지 않음) 0명이면 굳이 보여주지 않습니다.
+  if (r.view_count > 0) meta.textContent += ' · ' + r.view_count + '명이 봤어요';
   box.appendChild(meta);
+
+  // 음성으로 듣기 (barrier-free: 시각적으로 읽기 어려운 분들을 위한 기능, js/tts.js)
+  // 이 브라우저가 음성 읽기를 지원하지 않으면 makeTtsButton이 null을 돌려주고, 그때는 버튼을 안 만듭니다.
+  const ttsBtn = makeTtsButton(popupSpeechText(r));
+  if (ttsBtn) box.appendChild(ttsBtn);
+
+  // 상황이 바뀜: 정보 변경 신고 (openChangeReport는 js/change.js)
+  const changeBtn = document.createElement('button');
+  changeBtn.type = 'button';
+  changeBtn.className = 'popup-flag';
+  changeBtn.textContent = '현장 상황이 바뀌었어요';
+  changeBtn.addEventListener('click', () => openChangeReport(r.id));
+  box.appendChild(changeBtn);
 
   // 잘못된 정보 신고 (openFlag는 js/flag.js)
   const flagBtn = document.createElement('button');

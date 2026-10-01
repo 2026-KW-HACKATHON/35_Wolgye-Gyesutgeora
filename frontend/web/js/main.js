@@ -30,6 +30,25 @@ function showToast(msg, ms, action) {
   return el;
 }
 
+// 참여 현황 표시: "이번 달 제보 N건 · 지금까지 M건" (지도에 이미 받아 온 제보로 계산, 별도 API 없음)
+function updateLegendStat(reports) {
+  const el = document.getElementById('legendStat');
+  if (!reports || reports.length === 0) { el.hidden = true; return; }
+  const now = new Date();
+  const thisMonth = reports.filter(r => {
+    const d = new Date(r.created_at);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }).length;
+  el.textContent = '이번 달 제보 ' + thisMonth + '건 · 지금까지 ' + reports.length + '건';
+  el.hidden = false;
+}
+
+// 공유 링크(?report=id)로 들어온 경우, 데이터를 불러온 뒤 그 제보로 이동합니다
+function focusSharedReportFromUrl() {
+  const id = new URLSearchParams(location.search).get('report');
+  if (id) focusReport(id);
+}
+
 // 제보 목록과 태그를 서버에서 불러옵니다. 실패하면 "다시 시도" 버튼을 보여줍니다.
 async function loadMapData() {
   const loading = showToast('제보를 불러오는 중이에요…');
@@ -37,9 +56,11 @@ async function loadMapData() {
     setTagInfo(await fetchTags());
     const reports = await fetchReports();
     renderReports(reports);
+    updateLegendStat(reports);
     // 그 사이 다른 안내(예: 로그인 만료)가 떠 있다면 지우지 않고 "불러오는 중"만 치웁니다
     if (loading.isConnected) loading.remove();
     if (reports.length === 0) showToast(REPORT_STATUS ? '승인된 제보가 아직 없어요.' : '아직 등록된 제보가 없어요.', 3000);
+    else focusSharedReportFromUrl();
   } catch (e) {
     console.error(e);
     showToast(errorMessage(e), 0, { label: '다시 시도', onClick: loadMapData });

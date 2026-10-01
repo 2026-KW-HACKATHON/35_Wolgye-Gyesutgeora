@@ -1,13 +1,18 @@
-// 제보 위치를 지도에서 직접 고르는 화면 (제보 창의 "지도에서 직접 위치 선택"에서 열림)
-// 전체 화면 지도 가운데에 핀이 고정되어 있고, 사용자가 지도를 움직여 핀이 원하는 곳을 가리키게 합니다.
+// 지도에서 점 하나를 직접 고르는 화면. 제보 위치 선택(report.js)과 경로 찾기의 출발·도착 선택(route.js)이
+// 함께 씁니다. 전체 화면 지도 가운데에 핀이 고정되어 있고, 사용자가 지도를 움직여 핀이 원하는 곳을 가리키게 합니다.
 // 위쪽 "장소로 찾기"에 장소 이름을 검색하면 지도가 그 근처로 이동합니다. (장소 검색 코드는 js/places.js)
-// (작은 지도를 손가락으로 움직이면 제보 창 스크롤과 부딪혀서, 전체 화면 방식으로 만들었습니다)
-// 고른 위치는 report.js의 setManualPosition()으로 넘깁니다.
+// (작은 지도를 손가락으로 움직이면 아래 창 스크롤과 부딪혀서, 전체 화면 방식으로 만들었습니다)
+//
+// 사용법: openPick(onConfirm, { hint, title }) — "이 위치로 정하기"를 누르면 onConfirm(lat, lng)를 부릅니다.
+// hint/title을 안 주면 제보용 기본 문구를 씁니다.
 
 const pickSheet = document.getElementById('pickSheet');
 const pickHint = document.getElementById('pickHint');
-const PICK_HINT = '지도를 움직여서 빨간 핀이 제보할 곳을 가리키게 해 주세요.';
+const pickTitleEl = document.querySelector('#pickSheet .pick-title');
+const DEFAULT_PICK_HINT = '지도를 움직여서 빨간 핀이 원하는 곳을 가리키게 해 주세요.';
 let pickMap = null;
+let pickOnConfirm = null;   // 지금 열려 있는 선택 화면이 끝나면 부를 콜백
+let pickHintText = DEFAULT_PICK_HINT;   // "내 위치로" 등으로 바뀌었다가 되돌아갈 기본 문구
 
 const pickSearchInput = document.getElementById('pickSearchInput');
 const pickResults = document.getElementById('pickResults');
@@ -23,7 +28,8 @@ function pickPlace(p) {
   pickSearchInput.value = p.name;
   pickSearchInput.blur();
   pickMap.setView([p.lat, p.lng], 17);
-  pickHint.textContent = '"' + p.name + '" 근처로 이동했어요. 지도를 움직여 핀을 정확한 곳에 맞춘 뒤 "이 위치로 정하기"를 눌러 주세요.';
+  pickHintText = '"' + p.name + '" 근처로 이동했어요. 지도를 움직여 핀을 정확한 곳에 맞춘 뒤 "이 위치로 정하기"를 눌러 주세요.';
+  pickHint.textContent = pickHintText;
 }
 
 function renderPickResults(q) {
@@ -59,9 +65,13 @@ document.addEventListener('click', e => {
   if (!e.composedPath().includes(document.getElementById('pickSearch'))) clearPickResults();
 });
 
-function openPick() {
+function openPick(onConfirm, opts) {
+  pickOnConfirm = onConfirm;
+  pickHintText = (opts && opts.hint) || DEFAULT_PICK_HINT;
+  pickTitleEl.textContent = (opts && opts.title) || '위치 선택';
+
   pickSheet.hidden = false;   // 보이게 한 뒤에 지도를 만들어야 크기가 맞습니다
-  pickHint.textContent = PICK_HINT;
+  pickHint.textContent = pickHintText;
   pickSearchInput.value = '';
   clearPickResults();
 
@@ -86,8 +96,9 @@ function closePick() {
 
 function confirmPick() {
   const c = pickMap.getCenter();   // 화면 가운데 = 핀이 가리키는 곳
-  setManualPosition(c.lat, c.lng);
+  const cb = pickOnConfirm;
   closePick();
+  if (cb) cb(c.lat, c.lng);
 }
 
 // 선택 화면 안에서 지도를 내 위치로 옮기기
@@ -96,13 +107,15 @@ function pickGoMyLocation() {
   pickHint.textContent = '내 위치를 확인하고 있어요…';
   navigator.geolocation.getCurrentPosition(pos => {
     pickMap.setView([pos.coords.latitude, pos.coords.longitude], 17);
-    pickHint.textContent = PICK_HINT;
+    pickHint.textContent = pickHintText;
   }, () => {
     pickHint.textContent = '내 위치를 확인하지 못했어요. 지도를 직접 움직여 주세요.';
   }, { enableHighAccuracy: true, timeout: 8000 });
 }
 
-document.getElementById('pickOpen').addEventListener('click', openPick);
+document.getElementById('pickOpen').addEventListener('click', () => {
+  openPick(setManualPosition, { hint: '지도를 움직여서 빨간 핀이 제보할 곳을 가리키게 해 주세요.', title: '제보할 위치 선택' });
+});
 document.getElementById('pickCancel').addEventListener('click', closePick);
 document.getElementById('pickConfirm').addEventListener('click', confirmPick);
 document.getElementById('pickLocate').addEventListener('click', pickGoMyLocation);

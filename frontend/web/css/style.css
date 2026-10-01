@@ -35,6 +35,11 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.18); font-size: 14px; color: #333;
 }
 .legend div { display: flex; align-items: center; gap: 8px; line-height: 1.8; }
+.legend-stat {
+  font-size: 12px; font-weight: 700; color: #2f6fed; margin-bottom: 4px;
+  padding-bottom: 6px; border-bottom: 1px solid #eceff2;
+}
+.legend-stat[hidden] { display: none; }
 .legend i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
 
 .locate-btn {
@@ -52,6 +57,45 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.25); cursor: pointer;
 }
 .filter-btn.active { background: #2f6fed; color: #fff; }   /* 조건이 걸려 있으면 눈에 띄게 */
+
+.route-btn {
+  position: absolute; right: 12px; bottom: 208px; z-index: 1000;
+  min-height: 48px; padding: 0 18px; border: 2px solid #2f6fed; border-radius: 24px;
+  background: #fff; color: #2f6fed; font-size: 15px; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25); cursor: pointer;
+}
+.route-btn:active { background: #eaf1fe; }
+
+.route-clear-btn {
+  position: absolute; left: 50%; transform: translateX(-50%); top: 84px; z-index: 1000;
+  min-height: 40px; padding: 0 16px; border: 0; border-radius: 20px;
+  background: rgba(31,45,61,.92); color: #fff; font-size: 13.5px; font-weight: 700; cursor: pointer;
+}
+.route-clear-btn[hidden] { display: none; }
+
+/* 경로 찾기 창: 출발/도착 지점 */
+.route-point {
+  border: 1.5px solid #c5ccd4; border-radius: 12px; padding: 10px 12px; margin-bottom: 4px;
+}
+.route-point.set { border-color: #2f6fed; background: #f5f8ff; }
+.route-point-text { font-size: 14.5px; color: #1f2d3d; margin-bottom: 8px; word-break: break-word; }
+.route-point.set .route-point-text { color: #2459c4; font-weight: 700; }
+.route-point-actions { display: flex; gap: 8px; }
+.route-point-actions .check-btn { flex: 1; min-height: 44px; }
+
+/* 경로 찾기 결과 */
+.route-warning {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px 0; border-bottom: 1px solid #eceff2;
+}
+.route-warning:last-of-type { border-bottom: none; }
+.route-warning-dist { flex: 1 0 100%; font-size: 12.5px; color: #6b7785; }
+.route-ok { padding: 10px 0; font-size: 14px; color: #17603a; }
+
+/* 지도 위 경로 표시 */
+.route-dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.45); }
+.route-dot-start { background: #2e9e5b; }
+.route-dot-end { background: #d32f2f; }
 
 .report-btn {
   position: absolute; left: 16px; right: 16px; bottom: 24px; z-index: 1000;
@@ -310,6 +354,22 @@ button:disabled { opacity: .6; cursor: default; }
 .point-amount.use { color: #c62828; }
 .point-empty { padding: 14px 0; font-size: 14px; color: #6b7785; }
 
+/* 지역 상점 (뼈대 화면: 상품은 예시) */
+.store-example-note { color: #a35b00; font-weight: 700; }
+.store-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.store-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 14px; border: 1px solid #eceff2; border-radius: 12px; flex-wrap: wrap;
+}
+.store-item-body { min-width: 0; flex: 1 1 180px; }
+.store-item-shop { font-size: 12.5px; color: #6b7785; font-weight: 700; }
+.store-item-name { font-size: 15px; font-weight: 700; color: #1f2d3d; margin-top: 2px; }
+.store-item-desc { font-size: 13px; color: #6b7785; margin-top: 4px; word-break: keep-all; }
+.store-item-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.store-item-cost { font-size: 16px; font-weight: 800; color: #2f6fed; }
+.store-redeem { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.store-redeem:disabled { border-color: #c5ccd4; color: #9aa3ad; cursor: default; }
+
 .my-card {
   display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eceff2;
 }
@@ -347,11 +407,18 @@ button:disabled { opacity: .6; cursor: default; }
 }
 .done-check.warn { background: #e08a00; }   /* 아직 저장되지 않은 상태(화면만 준비됨) 안내용 */
 .done-summary { margin: 4px 0 16px; font-size: 15px; color: #444; word-break: keep-all; }
+.done-celebrate {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: #eef4ff;
+  font-size: 15px; font-weight: 700; color: #1f3d8f; word-break: keep-all;
+}
+.done-celebrate[hidden] { display: none; }
 .done-points {
   margin: 0 0 8px; padding: 14px; border-radius: 12px; background: #fff8e1;
   font-size: 14px; line-height: 1.5; text-align: left; color: #5d4700;
 }
 .done-points strong { display: block; margin-bottom: 4px; font-size: 15px; }
+.done-share { width: 100%; min-height: 50px; margin-top: 14px; }
+.done #doneShareMsg { text-align: center; }
 
 .pin {
   width: 26px; height: 26px; border-radius: 50%;
@@ -376,6 +443,14 @@ button:disabled { opacity: .6; cursor: default; }
 }
 .popup .desc { margin: 4px 0; color: #333; word-break: break-word; }
 .popup .meta { color: #6b7785; font-size: 13px; }
+.tts-btn {
+  display: block; width: 100%; margin-top: 8px; min-height: 40px; padding: 0 10px;
+  border: 1.5px solid #2f6fed; border-radius: 20px; background: #f5f8ff;
+  color: #2f6fed; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+}
+.tts-btn:active { background: #eaf1fe; }
+.tts-btn.speaking { border-color: #c62828; background: #fdecea; color: #c62828; }
+
 .popup-flag {
   display: block; width: 100%; margin-top: 8px; padding: 8px 0; border: 0; border-top: 1px solid #eceff2;
   background: none; color: #8a94a0; font-size: 12px; font-family: inherit; text-align: center;
