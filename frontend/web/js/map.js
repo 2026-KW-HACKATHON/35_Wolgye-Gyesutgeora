@@ -111,9 +111,9 @@ function popupContent(r) {
   const meta = document.createElement('div');
   meta.className = 'meta';
   meta.textContent = formatDate(r.created_at) + ' · ' + r.reporter_nickname;
-  // 조회수는 지도 목록 API(GET /api/reports)에 이미 포함돼 있어 별도 호출 없이 보여줍니다.
-  // (제보 상세 API처럼 조회수를 올리지 않음) 0명이면 굳이 보여주지 않습니다.
-  if (r.view_count > 0) meta.textContent += ' · ' + r.view_count + '명이 봤어요';
+  // 조회수는 사람 수가 아니라 "사용자·일" 단위 조회 횟수라서(같은 사람이 하루에 여러 번 열어도 1회),
+  // 백엔드 문서 권장대로 "N회 조회됨"으로 표시합니다. 0회면 굳이 보여주지 않습니다.
+  if (r.view_count > 0) meta.textContent += ' · ' + r.view_count + '회 조회됨';
   box.appendChild(meta);
 
   // 음성으로 듣기 (barrier-free: 시각적으로 읽기 어려운 분들을 위한 기능, js/tts.js)
@@ -121,19 +121,12 @@ function popupContent(r) {
   const ttsBtn = makeTtsButton(popupSpeechText(r));
   if (ttsBtn) box.appendChild(ttsBtn);
 
-  // 상황이 바뀜: 정보 변경 신고 (openChangeReport는 js/change.js)
-  const changeBtn = document.createElement('button');
-  changeBtn.type = 'button';
-  changeBtn.className = 'popup-flag';
-  changeBtn.textContent = '현장 상황이 바뀌었어요';
-  changeBtn.addEventListener('click', () => openChangeReport(r.id));
-  box.appendChild(changeBtn);
-
-  // 잘못된 정보 신고 (openFlag는 js/flag.js)
+  // 제보 신고 (openFlag는 js/flag.js. 원래 "잘못된 정보 신고"·"현장 상황이 바뀌었어요" 버튼 2개였는데
+  // 사용자가 복잡하다고 해서 2026-09-30에 하나로 합침 — 신고 사유는 그 창 안에서 고릅니다)
   const flagBtn = document.createElement('button');
   flagBtn.type = 'button';
   flagBtn.className = 'popup-flag';
-  flagBtn.textContent = '잘못된 정보 신고';
+  flagBtn.textContent = '제보 신고';
   flagBtn.addEventListener('click', () => openFlag(r.id));
   box.appendChild(flagBtn);
   return box;
@@ -174,9 +167,22 @@ function renderReports(reports) {
       html: '<div class="pin" style="background:' + markerColor(r.tags) + '"></div>',
       iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14]
     });
-    markersById[r.id] = L.marker([r.latitude, r.longitude], { icon })
+    const marker = L.marker([r.latitude, r.longitude], { icon })
       .bindPopup(() => popupContent(r), { minWidth: 220 })
       .addTo(markerLayer);
+    // 팝업을 열 때마다 조회수 집계를 시도합니다. 실패해도(네트워크 등) 팝업 자체는 그대로 보여주면 되므로 조용히 무시합니다.
+    // 서버가 실제로 센 값을 돌려주면 그 값으로 갱신해서, 열려 있는 팝업에도 바로 반영합니다.
+    marker.on('popupopen', () => {
+      recordView(r.id)
+        .then(res => {
+          if (res && res.view_count != null && res.view_count !== r.view_count) {
+            r.view_count = res.view_count;
+            if (marker.isPopupOpen()) marker.getPopup().setContent(popupContent(r));
+          }
+        })
+        .catch(() => {});
+    });
+    markersById[r.id] = marker;
   });
 }
 

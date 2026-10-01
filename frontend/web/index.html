@@ -71,13 +71,12 @@
         <button class="points-more" id="storeOpenBtn" type="button">지역 상점 보기 ›</button>
       </div>
 
-      <p class="sheet-note small" id="pointNote" hidden></p>
       <div class="field-msg" id="pointMsg" role="alert"></div>
 
       <div class="section-title">획득 내역</div>
       <div id="pointEarnList"></div>
 
-      <div class="section-title">사용 내역</div>
+      <div class="section-title">차감 내역</div>
       <div id="pointUseList"></div>
     </div>
   </div>
@@ -118,21 +117,22 @@
     </div>
   </div>
 
-  <!-- 잘못된 정보 신고 창 -->
+  <!-- 제보 신고 창 (원래 "잘못된 정보 신고"·"현장 상황이 바뀌었어요" 2개였는데, 어르신 등 사용자가
+       쉽게 쓰도록 2026-09-30에 하나로 합침. 사유에 따라 js/flag.js가 알아서 맞는 API로 보냅니다) -->
   <div class="sheet-backdrop" id="flagSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-label="잘못된 정보 신고">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="제보 신고">
       <button class="sheet-close" id="flagClose" type="button" aria-label="닫기">✕</button>
 
       <form id="flagForm" novalidate>
-        <h2 class="sheet-title">잘못된 정보 신고</h2>
-        <p class="sheet-note small">이 제보에 문제가 있다고 생각되면 알려주세요. 검토 후 조치할게요.</p>
+        <h2 class="sheet-title">제보 신고하기</h2>
+        <p class="sheet-note small">이 제보에 대해 알려줄 게 있으면 골라 주세요. 확인 후 처리할게요.</p>
 
         <div class="section-title">신고 사유 <span class="hint">(하나만 선택)</span></div>
         <div class="tag-group" id="flagReasonPicker"></div>
         <div class="field-msg" id="flagReasonMsg" role="alert"></div>
 
         <div class="section-title">자세한 설명 <span class="hint">(선택)</span></div>
-        <textarea id="flagDesc" name="description" rows="3" maxlength="300" placeholder="예) 실제로는 계단이 없어졌어요"></textarea>
+        <textarea id="flagDesc" name="description" rows="3" maxlength="300" placeholder="예) 계단이 아니라 경사로예요"></textarea>
 
         <div class="field-msg" id="flagFormMsg" role="alert"></div>
         <button class="primary" id="flagSubmit" type="submit">신고하기</button>
@@ -147,41 +147,12 @@
     </div>
   </div>
 
-  <!-- 정보 변경 신고 창 (상황이 바뀜: 공사 종료, 이제 지나갈 수 있음 등) -->
-  <div class="sheet-backdrop" id="changeSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-label="정보 변경 신고">
-      <button class="sheet-close" id="changeClose" type="button" aria-label="닫기">✕</button>
-
-      <form id="changeForm" novalidate>
-        <h2 class="sheet-title">현장 상황이 바뀌었어요</h2>
-        <p class="sheet-note small">제보 당시와 지금 상황이 달라졌다면 알려주세요. 관리자가 확인 후 반영할게요.</p>
-
-        <div class="section-title">무엇이 바뀌었나요 <span class="hint">(하나만 선택)</span></div>
-        <div class="tag-group" id="changeReasonPicker"></div>
-        <div class="field-msg" id="changeReasonMsg" role="alert"></div>
-
-        <div class="section-title">자세한 설명 <span class="hint">(선택)</span></div>
-        <textarea id="changeDesc" name="description" rows="3" maxlength="300" placeholder="예) 계단에 경사로가 새로 생겼어요"></textarea>
-
-        <div class="field-msg" id="changeFormMsg" role="alert"></div>
-        <button class="primary" id="changeSubmit" type="submit">신고하기</button>
-      </form>
-
-      <div id="changeDone" class="done" hidden>
-        <div class="done-check" id="changeDoneIcon">✓</div>
-        <h2 class="sheet-title">신고를 확인했어요</h2>
-        <p class="done-summary" id="changeDoneText"></p>
-        <button class="primary" id="changeDoneClose" type="button">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 경로 찾기 창 (⚠️ 백엔드 API 준비 전. 화면만 먼저 완성해 뒀고, API가 생기면 코드 수정 없이 바로 동작합니다) -->
+  <!-- 경로 찾기 창 (GET /api/route, 2026-10-01 백엔드 연동됨 — 직선 경로 주변의 제보를 경고로 보여주는 MVP) -->
   <div class="sheet-backdrop" id="routeSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-label="경로 찾기">
       <button class="sheet-close" id="routeClose" type="button" aria-label="닫기">✕</button>
       <h2 class="sheet-title">경로 찾기</h2>
-      <p class="sheet-note small">보행환경을 고려한 경로 추천 기능을 준비 중이에요. 출발지와 도착지를 정하면 경로와 주의할 구간을 알려드려요.</p>
+      <p class="sheet-note small">출발지와 도착지를 정하면 그 사이 직선 경로 근처에 알려진 보행 불편 구간이 있는지 알려드려요.</p>
 
       <div class="section-title">출발</div>
       <div class="route-point" id="routeFromBox">
@@ -205,6 +176,7 @@
       <button class="primary" id="routeFind" type="button" disabled>경로 찾기</button>
 
       <div id="routeResult" hidden>
+        <div class="route-summary" id="routeSummary"></div>
         <div class="section-title">주의할 구간</div>
         <div id="routeWarnings"></div>
         <button class="primary" id="routeShowOnMap" type="button">지도에서 보기</button>
@@ -250,6 +222,11 @@
         <div class="photo-grid" id="photoGrid"></div>
         <button class="photo-add" id="photoAdd" type="button">📷 사진 찍기 / 고르기</button>
         <input id="photoInput" type="file" accept="image/*" multiple hidden>
+        <p class="sheet-note small photo-paste-hint">사진을 복사한 뒤 여기서 Ctrl+V(붙여넣기)로도 추가할 수 있어요.</p>
+        <div class="photo-url-row">
+          <input id="photoUrlInput" type="text" inputmode="url" autocomplete="off" placeholder="또는 사진 주소(URL) 붙여넣기">
+          <button id="photoUrlAdd" type="button" class="check-btn">추가</button>
+        </div>
         <div class="field-msg" id="photoMsg" role="alert"></div>
 
         <div class="section-title">2. 위치</div>
@@ -369,7 +346,6 @@
 <script src="js/points.js"></script>
 <script src="js/store.js"></script>
 <script src="js/flag.js"></script>
-<script src="js/change.js"></script>
 <script src="js/search.js"></script>
 <script src="js/main.js"></script>
 </body>

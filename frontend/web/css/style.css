@@ -19,8 +19,13 @@ body {
   font-size: 16px; font-weight: 700; color: #1f2d3d;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.topbar small { display: block; font-weight: 400; font-size: 12px; color: #6b7785; margin-top: 2px; }
-.topbar-title { min-width: 0; }
+.topbar small {
+  display: block; font-weight: 400; font-size: 12px; color: #6b7785; margin-top: 2px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+/* 로그인하면 .topbar-user 쪽 버튼이 늘어나 이 영역이 좁아지는데, 줄바꿈 대신 "..."으로 잘라서
+   상단바 높이가 늘어나지 않게 합니다 (검색창이 상단바 바로 아래 고정 위치라 높이가 늘면 겹침) */
+.topbar-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .topbar-user { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; font-size: 13px; font-weight: 600; }
 .topbar-user #userName { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .auth-btn {
@@ -84,13 +89,17 @@ body {
 .route-point-actions .check-btn { flex: 1; min-height: 44px; }
 
 /* 경로 찾기 결과 */
+.route-summary { font-size: 13.5px; color: #6b7785; margin: 4px 0 10px; }
+.route-summary[hidden] { display: none; }
 .route-warning {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   padding: 10px 0; border-bottom: 1px solid #eceff2;
 }
 .route-warning:last-of-type { border-bottom: none; }
+.route-warning-title { flex: 1 0 100%; font-size: 14px; font-weight: 700; color: #1f2d3d; }
 .route-warning-dist { flex: 1 0 100%; font-size: 12.5px; color: #6b7785; }
 .route-ok { padding: 10px 0; font-size: 14px; color: #17603a; }
+.route-more { padding: 8px 0 0; font-size: 12.5px; color: #6b7785; }
 
 /* 지도 위 경로 표시 */
 .route-dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.45); }
@@ -266,6 +275,15 @@ button:disabled { opacity: .6; cursor: default; }
   background: #f5f8ff; color: #2f6fed; font-size: 16px; font-weight: 700; cursor: pointer;
 }
 .photo-add[hidden] { display: none; }
+
+.photo-paste-hint { margin: 6px 0 0; }
+.photo-url-row { display: flex; gap: 8px; margin-top: 8px; }
+.photo-url-row input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 12px;
+  border: 1.5px solid #c5ccd4; border-radius: 10px; font-size: 14px; font-family: inherit;
+}
+.photo-url-row input:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+.photo-url-row .check-btn { min-height: 44px; }
 
 .loc-box {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

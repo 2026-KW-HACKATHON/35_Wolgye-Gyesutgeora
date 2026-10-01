@@ -77,6 +77,39 @@ function addFiles(fileList) {
   setReportMsg('photoMsg', problems.length ? problems[0] : '', problems.length ? 'err' : '');
 }
 
+// 사진 주소(URL)를 불러와 사진으로 추가합니다. 서버 보안 설정(CSP connect-src)이 외부 주소를
+// 막고 있어서, 지금은 같은 서버(localhost:3000) 안의 주소만 실제로 동작합니다. 외부 주소는
+// 실패를 숨기지 않고 안내하며, 대신 복사 붙여넣기(아래 paste 이벤트)를 권합니다.
+async function addFromUrl(url) {
+  url = url.trim();
+  if (!url) return;
+  if (photos.length >= MAX_PHOTOS) {
+    setReportMsg('photoMsg', '사진은 최대 ' + MAX_PHOTOS + '장까지 올릴 수 있어요.', 'err');
+    return;
+  }
+  const btn = document.getElementById('photoUrlAdd');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '불러오는 중…';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('fetch-failed');
+    const blob = await res.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('not-image');
+    const EXT_BY_MIME = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/heic': '.heic' };
+    const file = new File([blob], 'url-image' + (EXT_BY_MIME[blob.type] || '.jpg'), { type: blob.type });
+    addFiles([file]);
+    document.getElementById('photoUrlInput').value = '';
+  } catch (e) {
+    setReportMsg('photoMsg',
+      '이 주소에서 사진을 못 불러왔어요. 보안 설정상 외부 주소는 아직 지원되지 않을 수 있어요 — ' +
+      '사진을 복사해서 Ctrl+V로 붙여넣거나 파일로 올려주세요.', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 function removePhoto(index) {
   photos.splice(index, 1);
   renderPhotos();
@@ -415,6 +448,26 @@ document.getElementById('photoAdd').addEventListener('click', () => photoInput.c
 photoInput.addEventListener('change', () => {
   addFiles(photoInput.files);
   photoInput.value = '';   // 같은 사진을 다시 고를 수 있게 비움
+});
+
+// 사진 복사 붙여넣기: 제보 창이 열려 있을 때 Ctrl+V 하면, 클립보드에 들어있는 이미지를 사진으로 추가합니다.
+// (글자를 붙여넣는 보통의 붙여넣기는 그대로 두고, 이미지가 있을 때만 가로챕니다)
+document.addEventListener('paste', e => {
+  if (reportSheet.hidden || !e.clipboardData) return;
+  const files = Array.from(e.clipboardData.items)
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile())
+    .filter(Boolean);
+  if (files.length) {
+    e.preventDefault();
+    addFiles(files);
+  }
+});
+
+const photoUrlInput = document.getElementById('photoUrlInput');
+document.getElementById('photoUrlAdd').addEventListener('click', () => addFromUrl(photoUrlInput.value));
+photoUrlInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addFromUrl(photoUrlInput.value); }
 });
 
 document.getElementById('locRetry').addEventListener('click', requestLocation);

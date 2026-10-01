@@ -3,8 +3,8 @@
 // 1) 월계 주요 장소(LOCAL_PLACES): 프론트에 내장한 목록이라 인터넷·서버 설정과 상관없이 바로 검색됩니다.
 //    좌표는 OpenStreetMap 장소 검색(2026-09)으로 확인한 "대략적인" 값입니다.
 // 2) 인터넷 장소 검색(searchOnlinePlaces): 목록에 없는 장소를 OpenStreetMap(Nominatim)에서 찾습니다.
-//    ※ 서버의 보안 설정(connect-src 'self')이 외부 접속을 막고 있으면 실패하고, 그때는 실패를 숨기지 않고 안내합니다.
-//      백엔드가 https://nominatim.openstreetmap.org 를 허용하면 프론트 수정 없이 그대로 동작합니다.
+//    2026-10-01 백엔드가 CSP(connect-src)에 https://nominatim.openstreetmap.org를 허용해서 이제 실제로 동작합니다.
+//    (혹시 네트워크 문제 등으로 실패해도 실패를 숨기지 않고 안내만 합니다 — 코드는 그대로 둠)
 
 const LOCAL_PLACES = [
   { name: '광운대학교',       alias: ['광운대', '광대', 'kwangwoon'], lat: 37.6208,  lng: 127.0578,  area: '월계1동' },

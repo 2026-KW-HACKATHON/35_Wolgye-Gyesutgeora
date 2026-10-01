@@ -86,6 +86,7 @@ document.getElementById('adminLogoutBtn').addEventListener('click', () => {
 
 let currentStatus = 'pending';
 let tagLabel = {};   // code -> label (팝업/목록 표시용)
+let adminTags = [];  // 태그 전체([{id, code, label, category}]) — 제보 수정 창에서 씀
 let currentReports = [];   // 지금 탭에서 서버로부터 받아온 전체 목록 (검색은 이 목록 안에서 클라이언트가 걸러냄)
 let reportSearchQuery = '';
 
@@ -177,6 +178,13 @@ function reportRow(r) {
     reject.addEventListener('click', () => changeStatus(r, 'rejected', row));
     actions.appendChild(reject);
   }
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'admin-delete';
+  edit.textContent = '수정';
+  edit.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+  actions.appendChild(edit);
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'admin-delete';
@@ -185,7 +193,140 @@ function reportRow(r) {
   actions.appendChild(del);
   row.appendChild(actions);
 
+  const panel = buildEditPanel(r);
+  row.appendChild(panel);
+
   return row;
+}
+
+// 제보 수정 창 (제목·설명·통행 상태·태그). PATCH /api/reports/:id 로 저장합니다. 평소엔 숨겨져 있다가
+// "수정" 버튼으로 펼칩니다. 검수 상태(승인·반려)·좌표·사진은 이 API로 바꾸지 않습니다(다른 API 영역).
+function buildEditPanel(r) {
+  const panel = document.createElement('div');
+  panel.className = 'admin-edit-panel';
+  panel.hidden = true;
+
+  const titleLabel = document.createElement('div');
+  titleLabel.className = 'section-title';
+  titleLabel.textContent = '제목';
+  panel.appendChild(titleLabel);
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'admin-edit-input';
+  titleInput.maxLength = 200;
+  titleInput.value = r.title || '';
+  panel.appendChild(titleInput);
+
+  const descLabel = document.createElement('div');
+  descLabel.className = 'section-title';
+  descLabel.textContent = '설명';
+  panel.appendChild(descLabel);
+  const descInput = document.createElement('textarea');
+  descInput.rows = 2;
+  descInput.value = r.description || '';
+  panel.appendChild(descInput);
+
+  const statusLabel = document.createElement('div');
+  statusLabel.className = 'section-title';
+  statusLabel.textContent = '통행 상태';
+  panel.appendChild(statusLabel);
+  const statusBox = document.createElement('div');
+  statusBox.className = 'status-picker';
+  let selectedStatusCode = r.accessibility_status || null;
+  adminTags.filter(t => t.category === 'accessibility').forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'status-btn';
+    btn.dataset.code = t.code;
+    btn.textContent = t.label;
+    btn.classList.toggle('on', selectedStatusCode === t.code);
+    btn.addEventListener('click', () => {
+      selectedStatusCode = t.code;
+      statusBox.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('on', b === btn));
+    });
+    statusBox.appendChild(btn);
+  });
+  panel.appendChild(statusBox);
+
+  const tagLabelTitle = document.createElement('div');
+  tagLabelTitle.className = 'section-title';
+  tagLabelTitle.textContent = '불편 유형';
+  panel.appendChild(tagLabelTitle);
+  const tagBox = document.createElement('div');
+  tagBox.className = 'tag-group';
+  const selectedTagIds = new Set(
+    adminTags.filter(t => t.category !== 'accessibility' && r.tags.includes(t.code)).map(t => t.id)
+  );
+  adminTags.filter(t => t.category !== 'accessibility').forEach(t => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tag-chip';
+    chip.textContent = t.label;
+    chip.classList.toggle('on', selectedTagIds.has(t.id));
+    chip.addEventListener('click', () => {
+      if (selectedTagIds.has(t.id)) selectedTagIds.delete(t.id); else selectedTagIds.add(t.id);
+      chip.classList.toggle('on');
+    });
+    tagBox.appendChild(chip);
+  });
+  panel.appendChild(tagBox);
+
+  const msg = document.createElement('div');
+  msg.className = 'field-msg';
+  panel.appendChild(msg);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'admin-edit-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'admin-approve';
+  saveBtn.textContent = '저장';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'admin-delete';
+  cancelBtn.textContent = '취소';
+  cancelBtn.addEventListener('click', () => { panel.hidden = true; });
+
+  saveBtn.addEventListener('click', async () => {
+    msg.textContent = '';
+    const tagIds = Array.from(selectedTagIds);
+    if (selectedStatusCode) {
+      const statusTagObj = adminTags.find(t => t.category === 'accessibility' && t.code === selectedStatusCode);
+      if (statusTagObj) tagIds.push(statusTagObj.id);
+    }
+    if (tagIds.length === 0) {
+      msg.textContent = '태그를 1개 이상 선택해 주세요.';
+      msg.className = 'field-msg err';
+      return;
+    }
+    const body = { title: titleInput.value.trim(), description: descInput.value.trim(), tag_ids: tagIds };
+    if (selectedStatusCode) body.accessibility_status = selectedStatusCode;
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      const res = await apiRequest('/api/reports/' + r.id, {
+        method: 'PATCH',
+        headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      currentReports = currentReports.map(x => x.id === res.report.id ? res.report : x);
+      renderReportList(['수정했어요.', 'ok']);
+    } catch (err) {
+      msg.textContent = errorMessage(err);
+      msg.className = 'field-msg err';
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+    }
+  });
+
+  btnRow.appendChild(saveBtn);
+  btnRow.appendChild(cancelBtn);
+  panel.appendChild(btnRow);
+
+  return panel;
 }
 
 // 제보 하나를 검색용 글자 하나로 합칩니다 (소문자) — 주민용 검색(js/search.js)과 같은 방식
@@ -230,9 +371,10 @@ async function deleteReport(report, row) {
   const buttons = row.querySelectorAll('.admin-actions button');
   buttons.forEach(b => b.disabled = true);
   try {
-    await apiRequest('/api/reports/' + report.id, { method: 'DELETE', headers: adminAuthHeader() });
+    const res = await apiRequest('/api/reports/' + report.id, { method: 'DELETE', headers: adminAuthHeader() });
     currentReports = currentReports.filter(r => r.id !== report.id);
-    renderReportList(['삭제했어요.', 'ok']);
+    const pointsMsg = res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
+    renderReportList(['삭제했어요.' + pointsMsg, 'ok']);
   } catch (err) {
     buttons.forEach(b => b.disabled = false);
     setListMsg(errorMessage(err));
@@ -245,10 +387,12 @@ async function loadReports() {
   try {
     if (!Object.keys(tagLabel).length) {
       const tags = await fetchTags();
+      adminTags = tags;
       tags.forEach(t => { tagLabel[t.code] = t.label; });
     }
     const query = currentStatus ? '?status=' + currentStatus : '';
-    const data = await apiRequest('/api/reports' + query);
+    // 2026-10-01: 백엔드가 비로그인 요청에는 approved 외 상태를 403으로 막기 시작해서, 관리자 토큰을 항상 보냅니다.
+    const data = await apiRequest('/api/reports' + query, { headers: adminAuthHeader() });
     currentReports = data.reports;
     renderReportList();
   } catch (err) {
@@ -257,9 +401,11 @@ async function loadReports() {
 }
 
 async function changeStatus(report, status, row) {
-  // 이미 승인(포인트 지급)됐던 제보를 반려로 바꿔도, 지급된 포인트는 자동으로 회수되지 않습니다.
-  if (report.status === 'approved' && status === 'rejected') {
-    if (!confirm('이미 승인되어 포인트가 지급된 제보예요. 반려로 바꿔도 지급된 포인트는 자동으로 회수되지 않아요. 계속할까요?')) return;
+  // 2026-10-01: 서버가 한때 승인 취소(반려·중복 처리) 시 포인트를 자동 회수하도록 바뀌었는데, 팀 결정(포인트 회수 기능은
+  // 만들지 않기로 함)과 반대라 백엔드에 되돌려 달라고 요청한 상태입니다. 처리 방식이 아직 확정이 아니라
+  // 특정 동작을 단정하지 않는 중립적인 문구로 둡니다. (실제로 회수되면 성공 메시지에 포인트 N점 회수로 표시됨)
+  if (report.status === 'approved' && status !== 'approved') {
+    if (!confirm('이미 승인되어 포인트가 지급된 제보예요. 계속할까요?')) return;
   }
   const buttons = row.querySelectorAll('.admin-actions button');
   buttons.forEach(b => b.disabled = true);
@@ -275,7 +421,8 @@ async function changeStatus(report, status, row) {
     } else {
       currentReports = currentReports.map(r => r.id === res.report.id ? res.report : r);
     }
-    const pointsMsg = res.points_awarded ? (' (포인트 ' + res.points_awarded + '점 지급)') : '';
+    const pointsMsg = res.points_awarded ? (' (포인트 ' + res.points_awarded + '점 지급)')
+      : res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
     renderReportList([(status === 'approved' ? '승인했어요.' : '반려했어요.') + pointsMsg, 'ok']);
   } catch (err) {
     buttons.forEach(b => b.disabled = false);
@@ -305,8 +452,8 @@ document.getElementById('adminTabs').addEventListener('click', e => {
   loadReports();
 });
 
-// apiRequest는 authHeader()(주민 로그인 토큰)를 자동으로 붙이지 않으므로,
-// 목록 조회(인증 불필요)는 그대로 두고 상태 변경(changeStatus)에서만 관리자 토큰을 직접 붙입니다.
+// apiRequest는 authHeader()(주민 로그인 토큰)를 자동으로 붙이지 않으므로, 이 파일의 모든 요청에
+// adminAuthHeader()를 직접 붙입니다. (2026-10-01: 목록 조회도 비로그인이면 approved 외 상태가 403이라 필요해짐)
 
 // ----- 큰 섹션 전환: 제보 검토 / 신고 관리 -----
 
@@ -314,7 +461,9 @@ function switchSection(section) {
   document.querySelectorAll('#adminSectionTabs .admin-tab').forEach(b => b.classList.toggle('active', b.dataset.section === section));
   document.getElementById('reportsView').hidden = section !== 'reports';
   document.getElementById('moderationView').hidden = section !== 'moderation';
+  document.getElementById('usersView').hidden = section !== 'users';
   if (section === 'moderation' && !modLoadedOnce) { modLoadedOnce = true; renderModStatusTabs(); loadModeration(); }
+  if (section === 'users' && !usersLoadedOnce) { usersLoadedOnce = true; loadUsers(); }
 }
 
 document.getElementById('adminSectionTabs').addEventListener('click', e => {
@@ -341,7 +490,7 @@ async function goToReport(reportId) {
 const FLAG_REASON_LABEL = { bad_photo: '부적절한 사진', wrong_info: '실제와 다른 정보', duplicate: '중복된 제보', etc: '기타' };
 const CHANGE_REASON_LABEL = {
   obstacle_removed: '장애물 제거됨', construction_done: '공사 종료', now_passable: '통행 가능해짐',
-  now_impassable: '통행 불가로 변경됨', info_different: '정보가 다름', etc: '기타'
+  now_impassable: '통행 불가로 변경됨', info_different: '그 외 상황이 달라짐', etc: '기타'
 };
 const FLAG_STATUS_TABS = [['open', '대기 중'], ['resolved', '처리 완료'], ['dismissed', '기각됨'], ['', '전체']];
 const CHANGE_STATUS_TABS = [['open', '대기 중'], ['accepted', '반영됨'], ['dismissed', '기각됨'], ['', '전체']];
@@ -642,6 +791,133 @@ async function refreshModBadge() {
     badge.hidden = true;
   }
 }
+
+// ----- 회원 관리 (조회 전용. GET /api/admin/users) -----
+
+let usersLoadedOnce = false;
+let userPage = 1;
+let userRole = '';
+let userQuery = '';
+let userSearchTimer = null;
+
+function setUserMsg(text, kind) {
+  const el = document.getElementById('userMsg');
+  el.textContent = text || '';
+  el.className = 'field-msg' + (text ? ' ' + (kind || 'err') : '');
+}
+
+const ROLE_LABEL = { user: '일반회원', admin: '관리자' };
+
+function userRow(u) {
+  const row = document.createElement('div');
+  row.className = 'admin-row';
+
+  const body = document.createElement('div');
+  body.className = 'admin-row-body';
+
+  const top = document.createElement('div');
+  top.className = 'admin-row-top';
+  const roleBadge = document.createElement('span');
+  roleBadge.className = 'review-badge ' + (u.role === 'admin' ? 'approved' : 'pending');
+  roleBadge.textContent = ROLE_LABEL[u.role] || u.role;
+  top.appendChild(roleBadge);
+  if (!u.is_active) {
+    const inactive = document.createElement('span');
+    inactive.className = 'review-badge rejected';
+    inactive.textContent = '비활성';
+    top.appendChild(inactive);
+  }
+  body.appendChild(top);
+
+  const title = document.createElement('div');
+  title.className = 'my-title';
+  title.textContent = u.nickname + ' (' + u.username + ')';
+  body.appendChild(title);
+
+  const meta = document.createElement('div');
+  meta.className = 'my-meta';
+  meta.textContent = '포인트 ' + u.points + 'P · 제보 ' + u.report_count + '건 · 가입 ' + formatDate(u.created_at);
+  body.appendChild(meta);
+
+  row.appendChild(body);
+  return row;
+}
+
+function renderUserPagination(p) {
+  const box = document.getElementById('userPagination');
+  box.textContent = '';
+  if (!p || p.total_pages <= 1) return;
+
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.className = 'check-btn';
+  prev.textContent = '‹ 이전';
+  prev.disabled = p.page <= 1;
+  prev.addEventListener('click', () => { userPage = p.page - 1; loadUsers(); });
+  box.appendChild(prev);
+
+  const info = document.createElement('span');
+  info.className = 'user-page-info';
+  info.textContent = p.page + ' / ' + p.total_pages + ' 페이지 (전체 ' + p.total + '명)';
+  box.appendChild(info);
+
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'check-btn';
+  next.textContent = '다음 ›';
+  next.disabled = p.page >= p.total_pages;
+  next.addEventListener('click', () => { userPage = p.page + 1; loadUsers(); });
+  box.appendChild(next);
+}
+
+async function loadUsers() {
+  setUserMsg('불러오는 중…', '');
+  const list = document.getElementById('userList');
+  list.textContent = '';
+  try {
+    const params = new URLSearchParams();
+    if (userRole) params.set('role', userRole);
+    if (userQuery) params.set('q', userQuery);
+    params.set('page', String(userPage));
+    const data = await apiRequest('/api/admin/users?' + params.toString(), { headers: adminAuthHeader() });
+    if (data.users.length === 0) {
+      setUserMsg('해당하는 회원이 없어요.', 'ok');
+    } else {
+      setUserMsg('');
+      data.users.forEach(u => list.appendChild(userRow(u)));
+    }
+    renderUserPagination(data.pagination);
+  } catch (err) {
+    setUserMsg(errorMessage(err));
+  }
+}
+
+document.getElementById('userRoleTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.admin-tab');
+  if (!btn) return;
+  document.querySelectorAll('#userRoleTabs .admin-tab').forEach(b => b.classList.toggle('active', b === btn));
+  userRole = btn.dataset.role;
+  userPage = 1;
+  loadUsers();
+});
+
+document.getElementById('userSearch').addEventListener('input', e => {
+  userQuery = e.target.value.trim();
+  document.getElementById('userSearchClear').hidden = userQuery === '';
+  userPage = 1;
+  // 검색어를 입력하는 동안은 매 글자마다 요청하지 않고, 입력이 잠깐 멈추면 한 번만 요청합니다.
+  clearTimeout(userSearchTimer);
+  userSearchTimer = setTimeout(loadUsers, 300);
+});
+document.getElementById('userSearchClear').addEventListener('click', () => {
+  const input = document.getElementById('userSearch');
+  input.value = '';
+  userQuery = '';
+  userPage = 1;
+  document.getElementById('userSearchClear').hidden = true;
+  loadUsers();
+  input.focus();
+});
 
 // ----- 시작 -----
 

@@ -50,10 +50,11 @@ const ERROR_MESSAGES = {
 
 function errorMessage(err) {
   if (err.code === 'OUT_OF_REGION') {
+    // 제보 등록과 경로 찾기(GET /api/route) 둘 다 이 코드를 쓰므로, 둘 다에 맞는 문구로 씁니다.
     const d = err.data || {};
-    let text = '월계1동 안에서만 제보할 수 있어요.';
+    let text = '월계1동 서비스 지역 안에서만 이용할 수 있어요.';
     if (d.distance_km != null) text += ' 이 위치는 월계1동 중심에서 약 ' + d.distance_km + 'km 떨어져 있어요.';
-    if (d.allowed_radius_km != null) text += ' (제보 가능 반경 ' + d.allowed_radius_km + 'km)';
+    if (d.allowed_radius_km != null) text += ' (이용 가능 반경 ' + d.allowed_radius_km + 'km)';
     return text;
   }
   if (err.code && ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];
@@ -74,9 +75,10 @@ async function fetchReports() {
   return (await apiRequest('/api/reports' + query)).reports;
 }
 
-// 보행환경을 고려한 경로 추천 (⚠️ 백엔드 API 준비 전 — 아직 이 주소가 없어서 404가 나며, 호출한 쪽(js/route.js)이
-// 그 경우를 "화면만 준비됨"으로 안내합니다. API가 생기면 이 함수는 고치지 않아도 바로 동작합니다.)
-// 기대하는 응답: { route: [[lat,lng], ...], warnings: [{ report_id, distance_m, tags, accessibility_status }] }
+// 경로(직선) 근처의 승인된 제보를 경고로 돌려줍니다 (2026-10-01 백엔드 연동됨). 로그인 불필요.
+// 응답: { route, route_distance_m, warnings: [{ report_id, title, distance_m, along_m, tags, accessibility_status }],
+//         total_warnings, truncated }
+// 경로의 점이 서비스 지역 밖이면 403 OUT_OF_REGION (errorMessage()가 안내 문구를 만들어 줍니다).
 async function fetchRoute(fromLat, fromLng, toLat, toLng) {
   const q = 'from_lat=' + fromLat + '&from_lng=' + fromLng + '&to_lat=' + toLat + '&to_lng=' + toLng;
   return apiRequest('/api/route?' + q);
@@ -99,48 +101,26 @@ async function fetchMyReports() {
   return (await apiRequest('/api/reports/mine', { headers: authHeader() })).reports;
 }
 
-// 내 포인트 내역: { fromReports, entries: [{ type: 'earn'|'use', amount, reason, reportTitle, date }] } (최신순)
-//
-// 1) 백엔드에 전용 API(GET /api/points/history)가 생기면 그걸 씁니다.
-//    기대하는 형태: { history: [{ id, type: 'earn'|'use', amount, reason, report_id, report_title, created_at }] }
-// 2) 아직 없으면(404) 내 "승인된 제보"의 상세에서 실제 지급 정보(point_awarded, points_amount)를 모아 만듭니다.
-//    ※ 제보 상세 API(GET /api/reports/:id)는 호출할 때마다 조회수(view_count)가 1 올라갑니다.
-//      (조회수는 화면 어디에도 쓰지 않지만, 전용 API가 생기기 전까지의 임시 방법입니다)
-const POINT_REASON_LABEL = { report_approved: '제보 승인', report_approval: '제보 승인' };
+// 내 포인트 지급·회수 내역 (2026-10-01 GET /api/points/history 연동됨): [{ type: 'earn'|'revoke', amount, reason, reportTitle, date }] (최신순)
+const POINT_REASON_LABEL = {
+  report_approved: '제보 승인',
+  change_report_accepted: '정보 변경 신고 채택',
+  approval_cancelled: '제보 승인 취소 (반려·중복 처리)',
+  report_deleted: '제보 삭제'
+};
 
 async function fetchPointHistory() {
-  try {
-    const data = await apiRequest('/api/points/history', { headers: authHeader() });
-    const entries = (data.history || []).map(h => ({
-      type: h.type === 'use' ? 'use' : 'earn',
+  const data = await apiRequest('/api/points/history', { headers: authHeader() });
+  // 서버가 이미 최신순으로 주지만, 혹시 몰라 한 번 더 정렬합니다.
+  return (data.history || [])
+    .map(h => ({
+      type: h.type === 'revoke' ? 'revoke' : 'earn',
       amount: Math.abs(Number(h.amount) || 0),
-      reason: POINT_REASON_LABEL[h.reason] || h.reason || (h.type === 'use' ? '포인트 사용' : '포인트 지급'),
+      reason: POINT_REASON_LABEL[h.reason] || h.reason,
       reportTitle: h.report_title || '',
       date: h.created_at
-    }));
-    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
-    return { fromReports: false, entries };
-  } catch (err) {
-    if (err.status !== 404) throw err;   // 404(API 없음)일 때만 임시 방법으로 넘어갑니다
-  }
-
-  const mine = await fetchMyReports();
-  const approved = mine.filter(r => r.status === 'approved');
-  const details = await Promise.allSettled(
-    approved.map(r => apiRequest('/api/reports/' + r.id).then(d => d.report))
-  );
-  const entries = details
-    .filter(d => d.status === 'fulfilled' && d.value.point_awarded && d.value.points_amount > 0)
-    .map(d => ({
-      type: 'earn',
-      amount: d.value.points_amount,
-      reason: '제보 승인',
-      reportTitle: d.value.title || '',
-      date: d.value.updated_at || d.value.created_at,
-      tags: d.value.tags
-    }));
-  entries.sort((a, b) => new Date(b.date) - new Date(a.date));
-  return { fromReports: true, entries };
+    }))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 // ----- 상점 -----
@@ -155,6 +135,13 @@ async function redeemStoreItem(itemId) {
     headers: { ...authHeader(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ item_id: itemId })
   });
+}
+
+// 조회수 집계: 지도 팝업을 열 때 호출합니다 (2026-10-01 백엔드 연동). 로그인 없어도 되고(그때는 IP 기준),
+// 로그인했으면 사용자 기준으로 하루(한국 시간) 1회만 반영됩니다. 승인된 제보만 집계합니다.
+// 응답: { counted: boolean, view_count: number }
+function recordView(reportId) {
+  return apiRequest('/api/reports/' + reportId + '/view', { method: 'POST', headers: authHeader() });
 }
 
 // ----- 로그인·회원가입 -----

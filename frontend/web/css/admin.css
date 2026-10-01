@@ -70,6 +70,25 @@ body.admin-body { align-items: flex-start; }
 .admin-delete:active { background: #f1f3f5; }
 .admin-approve:disabled, .admin-reject:disabled, .admin-delete:disabled { opacity: .5; cursor: default; }
 
+/* 제보 수정 (제목·설명·통행 상태·태그) */
+.admin-edit-panel {
+  flex: 1 0 100%; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eceff2;
+}
+.admin-edit-panel .section-title { font-size: 13px; color: #6b7785; font-weight: 700; margin: 10px 0 6px; }
+.admin-edit-panel .section-title:first-child { margin-top: 0; }
+.admin-edit-input, .admin-edit-panel textarea {
+  width: 100%; padding: 10px 12px; border: 1.5px solid #c5ccd4; border-radius: 10px;
+  font-size: 14px; font-family: inherit; color: #1f2d3d; box-sizing: border-box;
+}
+.admin-edit-panel textarea { resize: vertical; }
+.admin-edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* 회원 관리 페이지 나누기 */
+.admin-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+.admin-pagination .check-btn { min-height: 40px; padding: 0 14px; }
+.admin-pagination .check-btn:disabled { opacity: .4; cursor: default; }
+.user-page-info { font-size: 13px; color: #6b7785; }
+
 /* 신고 관리: 통행 상태 선택, 안내 문구 */
 .mod-select {
   min-height: 44px; padding: 0 10px; border: 1.5px solid #c5ccd4; border-radius: 10px;

@@ -57,6 +57,8 @@ function reportCard(r) {
   const meta = document.createElement('div');
   meta.className = 'my-meta';
   meta.textContent = formatDate(r.created_at);
+  // 2026-10-01: GET /api/reports/mine 응답에 view_count가 추가됨
+  if (r.view_count > 0) meta.textContent += ' · ' + r.view_count + '회 조회됨';
   body.appendChild(meta);
 
   card.appendChild(body);
