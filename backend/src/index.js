@@ -96,9 +96,21 @@ const reportLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: '제보 등록은 1시간에 최대 20건까지 가능합니다.' },
 });
+// 정보 변경 신고(사진 업로드 포함): 1시간 내 20건
+const changeReportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '정보 변경 신고는 1시간에 최대 20건까지 가능합니다.' },
+});
 app.use('/api/reports', (req, res, next) => {
   // 이 미들웨어 기준 req.path는 '/api/reports' 이후 경로 → 생성은 정확히 '/'
   if (req.method === 'POST' && req.path === '/') return reportLimiter(req, res, next);
+  // 변경 신고는 '/:id/change-report'
+  if (req.method === 'POST' && /^\/[^/]+\/change-report$/.test(req.path)) {
+    return changeReportLimiter(req, res, next);
+  }
   next();
 });
 

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
-const { changeReportStatus } = require('../utils/points');
+const { changeReportStatus, awardChangeReportPoints } = require('../utils/points');
+const { ContentError, parseTagIds, updateReportContent } = require('../utils/reportContent');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -57,9 +58,10 @@ async function createFlag(req, res) {
 }
 
 // ------------------------------------------------------------
-// 사용자용: 정보 변경 신고 (상황이 바뀜)
+// 사용자용: 정보 변경 신고 (상황이 바뀜) — JSON 전용 (사진·GPS 없음)
 // POST /api/reports/:id/change-report  🔒
 // body: { reason, description? }
+// 같은 사용자가 같은 제보에 아직 처리되지 않은(open) 신고가 있으면 409 ALREADY_REPORTED.
 // ------------------------------------------------------------
 async function createChangeReport(req, res) {
   const { id } = req.params;
@@ -67,30 +69,54 @@ async function createChangeReport(req, res) {
     return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
   }
 
-  const { reason, description } = req.body;
+  const { reason, description } = req.body || {};
   if (!reason || !CHANGE_REASONS.includes(reason)) {
     return res.status(400).json({
       error: `reason은 ${CHANGE_REASONS.join(', ')} 중 하나여야 합니다.`,
     });
   }
 
+  const client = await pool.connect();
   try {
-    const exists = await pool.query('SELECT id FROM reports WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    const exists = await client.query('SELECT id FROM reports WHERE id = $1', [id]);
     if (exists.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
 
-    const { rows } = await pool.query(
+    // 접수(open) 상태 신고 중복 방지 (처리된 뒤 다시 신고하는 것은 가능).
+    // 동시에 두 번 눌러도 한 건만 들어가도록 사용자·제보 단위로 잠근다.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`change-report:${id}:${req.user.id}`]);
+    const dup = await client.query(
+      `SELECT 1 FROM report_change_reports
+       WHERE report_id = $1 AND user_id = $2 AND status = 'open' LIMIT 1`,
+      [id, req.user.id]
+    );
+    if (dup.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: '이미 접수된 변경 신고가 있어요. 검토가 끝난 뒤 다시 신고해주세요.',
+        code: 'ALREADY_REPORTED',
+      });
+    }
+
+    const { rows } = await client.query(
       `INSERT INTO report_change_reports (report_id, user_id, reason, description)
        VALUES ($1, $2, $3, $4)
        RETURNING id, report_id, reason, description, status, created_at`,
-      [id, req.user.id, reason, (description || '').trim() || null]
+      [id, req.user.id, reason, (typeof description === 'string' ? description.trim() : '') || null]
     );
 
+    await client.query('COMMIT');
     return res.status(201).json({ change_report: rows[0] });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
+  } finally {
+    client.release();
   }
 }
 
@@ -226,20 +252,38 @@ async function adminListChangeReports(req, res) {
 // PATCH /api/admin/change-reports/:id  🔒 admin
 // body: {
 //   action: 'accept' | 'dismiss',
-//   accessibility_status?: passable|inconvenient|impassable,  // accept 시 원본에 반영(선택)
-//   status?: pending|approved|rejected|duplicate              // accept 시 원본에 반영(선택)
+//   // 아래는 accept일 때만 쓰이며 모두 선택. 보내면 자동 반영 값보다 우선한다.
+//   accessibility_status?: passable|inconvenient|impassable,
+//   title?, description?, tag_ids?,
+//   status?: pending|approved|rejected|duplicate     // 원본 제보의 검수 상태
 // }
-// accept 시: 신고를 accepted로 바꾸고, 넘어온 값으로 원본 제보를 갱신.
-//            값을 안 넘겨도 원본 updated_at(최근 확인일)은 새로 찍힘.
-//            status를 넘기면 PATCH /api/reports/:id/status 와 같이 포인트 지급/회수도 함께 처리됨.
+//
+// 'open'(접수) 상태인 신고만 처리할 수 있다. 이미 처리된 신고는 409 ALREADY_PROCESSED.
+//
+// accept 시 원본 제보가 자동으로 바뀐다 (신고 사유 기준):
+//   now_passable      → 통행 상태를 passable 로
+//   now_impassable    → 통행 상태를 impassable 로
+//   obstacle_removed  → 태그 obstacle(적치물/장애물) 제거
+//   construction_done → 태그 construction(공사 중) 제거
+//   info_different / etc → 자동으로 바꿀 수 없으므로 title, description, tag_ids,
+//                          accessibility_status, status 중 하나 이상을 직접 보내야 한다(없으면 400 NEEDS_CHANGES).
+// 원본 제보의 updated_at(최근 확인일)은 항상 새로 찍힌다.
+// 수락하면 신고자에게 포인트(POINTS_PER_CHANGE_REPORT, 기본 30)를 지급하고, 반려하면 지급하지 않는다.
 // ------------------------------------------------------------
+const AUTO_CHANGES = {
+  now_passable:      { accessibilityStatus: 'passable' },
+  now_impassable:    { accessibilityStatus: 'impassable' },
+  obstacle_removed:  { removeTagCodes: ['obstacle'] },
+  construction_done: { removeTagCodes: ['construction'] },
+};
+
 async function adminReviewChangeReport(req, res) {
   const { id } = req.params;
   if (!UUID_RE.test(id)) {
     return res.status(404).json({ error: '변경 신고를 찾을 수 없습니다.' });
   }
 
-  const { action, accessibility_status, status } = req.body;
+  const { action, accessibility_status, status, title, description, tag_ids } = req.body;
   if (!['accept', 'dismiss'].includes(action)) {
     return res.status(400).json({ error: "action은 'accept' 또는 'dismiss'여야 합니다." });
   }
@@ -256,55 +300,111 @@ async function adminReviewChangeReport(req, res) {
 
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
+    // 신고 행을 잠가 동시에 두 번 처리돼도 수락·포인트 지급이 한 번만 일어나게 한다.
     const { rows: found } = await client.query(
-      'SELECT id, report_id, status FROM report_change_reports WHERE id = $1',
+      `SELECT c.id, c.report_id, c.user_id, c.reason, c.status, r.title AS report_title
+       FROM report_change_reports c
+       JOIN reports r ON r.id = c.report_id
+       WHERE c.id = $1
+       FOR UPDATE OF c`,
       [id]
     );
     if (found.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: '변경 신고를 찾을 수 없습니다.' });
     }
     const changeReport = found[0];
 
-    await client.query('BEGIN');
+    if (changeReport.status !== 'open') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: '이미 처리된 변경 신고입니다.',
+        code: 'ALREADY_PROCESSED',
+      });
+    }
+
+    let pointsAwarded = 0;
 
     if (action === 'dismiss') {
       await client.query(
-        `UPDATE report_change_reports SET status = 'dismissed' WHERE id = $1`,
-        [id]
+        `UPDATE report_change_reports
+         SET status = 'dismissed', resolved_by = $2, resolved_at = NOW()
+         WHERE id = $1`,
+        [id, req.user.id]
       );
     } else {
-      // accept: 신고 반영 완료 처리 + 원본 제보 갱신(+최근 확인일 갱신)
-      await client.query(
-        `UPDATE report_change_reports SET status = 'accepted' WHERE id = $1`,
-        [id]
-      );
+      const auto = AUTO_CHANGES[changeReport.reason] || {};
 
-      // 원본 제보 갱신 — 넘어온 값만 반영. updated_at은 트리거로 자동 갱신됨.
-      // 통행 상태 반영 (값이 없어도 최근 확인일(updated_at)이 새로 찍히도록 항상 UPDATE 수행)
-      await client.query(
-        `UPDATE reports
-         SET accessibility_status = COALESCE($1, accessibility_status), updated_at = NOW()
-         WHERE id = $2`,
-        [accessibility_status || null, changeReport.report_id]
-      );
+      // 관리자가 직접 보낸 값은 자동 반영 값보다 우선한다.
+      const hasTitle = title !== undefined;
+      const hasDescription = description !== undefined;
+      const hasTags = tag_ids !== undefined && tag_ids !== '';
+      const hasManual = hasTitle || hasDescription || hasTags || !!accessibility_status || !!status;
+
+      // 자동 반영 규칙이 없는 사유(info_different, etc)는 관리자가 바꿀 내용을 직접 보내야 한다.
+      if (!AUTO_CHANGES[changeReport.reason] && !hasManual) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: '이 신고는 자동으로 반영할 수 없습니다. title, description, tag_ids, accessibility_status, status 중 하나 이상을 함께 보내주세요.',
+          code: 'NEEDS_CHANGES',
+        });
+      }
+
+      const fields = {
+        accessibilityStatus: accessibility_status || auto.accessibilityStatus,
+      };
+      if (hasTitle) fields.title = title;
+      if (hasDescription) fields.description = description;
+      if (hasTags) fields.tagIds = parseTagIds(tag_ids);
+      else if (auto.removeTagCodes) fields.removeTagCodes = auto.removeTagCodes;
+      if (fields.accessibilityStatus === undefined) delete fields.accessibilityStatus;
+
+      // 원본 제보 갱신 (+ 최근 확인일 갱신)
+      const updated = await updateReportContent(client, changeReport.report_id, fields);
+      if (!updated) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: '원본 제보를 찾을 수 없습니다.' });
+      }
 
       // 승인 상태 변경은 포인트 지급/회수가 함께 처리되도록 공용 로직을 거친다.
-      // (approved → rejected 등으로 바뀌면 지급된 포인트 회수, 처음 approved가 되면 지급)
+      // (approved → rejected 등으로 바뀌면 제보자에게 지급된 포인트 회수, 처음 approved가 되면 지급)
       if (status) {
         await changeReportStatus(client, changeReport.report_id, status);
       }
+
+      await client.query(
+        `UPDATE report_change_reports
+         SET status = 'accepted', resolved_by = $2, resolved_at = NOW()
+         WHERE id = $1`,
+        [id, req.user.id]
+      );
+
+      // 신고자에게 포인트 지급 (수락된 신고만)
+      pointsAwarded = await awardChangeReportPoints(client, {
+        userId: changeReport.user_id,
+        reportId: changeReport.report_id,
+        reportTitle: changeReport.report_title,
+      });
     }
 
     await client.query('COMMIT');
 
     const { rows: updated } = await pool.query(
-      `SELECT id, report_id, reason, description, status, created_at
+      `SELECT id, report_id, reason, description, status, created_at, resolved_at
        FROM report_change_reports WHERE id = $1`,
       [id]
     );
-    return res.json({ change_report: updated[0] });
+    return res.json({
+      change_report: updated[0],
+      ...(pointsAwarded > 0 && { points_awarded: pointsAwarded }),
+    });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof ContentError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
   } finally {

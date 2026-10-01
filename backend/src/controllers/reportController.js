@@ -4,6 +4,7 @@ const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
 const { changeReportStatus, revokeAwardedPoints } = require('../utils/points');
+const { ContentError, parseTagIds, updateReportContent } = require('../utils/reportContent');
 
 // 업로드 사진 저장 폴더 (upload.js와 동일 규칙)
 const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
@@ -401,6 +402,63 @@ async function deleteReport(req, res) {
   }
 }
 
+/**
+ * PATCH /api/reports/:id
+ * 관리자 전용: 제보 본문 수정 ("정보 수정")
+ * body(JSON): { title?, description?, tag_ids?, accessibility_status? }  — 보낸 항목만 바뀐다.
+ *   - title / description : 문자열. 빈 문자열이면 비움(null). title은 200자 이하
+ *   - tag_ids             : 태그 id 배열 또는 "1,3" — 태그를 이 목록으로 통째로 교체 (최소 1개)
+ *   - accessibility_status: passable | inconvenient | impassable
+ * 제보 상태(승인·반려)는 PATCH /api/reports/:id/status 로 바꾼다. 이 API는 상태·좌표·사진을 바꾸지 않는다.
+ * 수정하면 updated_at(최근 확인일)이 갱신된다.
+ * 성공 200 → { report: {...상세와 같은 형태} }
+ * 실패 400 항목 없음/값 오류(code: NO_FIELDS | INVALID_* | TAGS_REQUIRED) / 404 제보 없음
+ */
+async function adminUpdateReport(req, res) {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) {
+    return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+  }
+
+  const { title, description, tag_ids, accessibility_status } = req.body || {};
+  const hasTags = tag_ids !== undefined;
+  if (title === undefined && description === undefined && !hasTags && accessibility_status === undefined) {
+    return res.status(400).json({
+      error: '수정할 항목(title, description, tag_ids, accessibility_status) 중 하나 이상을 보내주세요.',
+      code: 'NO_FIELDS',
+    });
+  }
+
+  const fields = {};
+  if (title !== undefined) fields.title = title;
+  if (description !== undefined) fields.description = description;
+  if (hasTags) fields.tagIds = parseTagIds(tag_ids);
+  if (accessibility_status !== undefined) fields.accessibilityStatus = accessibility_status;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await updateReportContent(client, id, fields);
+    if (!result) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
+    }
+    await client.query('COMMIT');
+
+    const updated = await getReportById(id);
+    return res.json({ report: updated });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof ContentError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    console.error(err);
+    return res.status(500).json({ error: '서버 오류' });
+  } finally {
+    client.release();
+  }
+}
+
 // ------------------------------------------------------------
 // 내부 유틸
 // ------------------------------------------------------------
@@ -432,15 +490,4 @@ async function getReportById(id) {
   return rows[0] || null;
 }
 
-function parseTagIds(raw) {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw.map(v => parseInt(v)).filter(v => !Number.isNaN(v));
-  }
-  return String(raw)
-    .split(',')
-    .map(v => parseInt(v.trim()))
-    .filter(v => !Number.isNaN(v));
-}
-
-module.exports = { createReport, listReports, listMyReports, getReport, recordView, updateReportStatus, deleteReport };
+module.exports = { createReport, listReports, listMyReports, getReport, recordView, updateReportStatus, adminUpdateReport, deleteReport };

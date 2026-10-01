@@ -4,6 +4,12 @@
 // 승인 시 지급할 포인트 (환경변수로 조정 가능, 기본 10)
 const POINTS_PER_APPROVAL = parseInt(process.env.POINTS_PER_APPROVAL || '10');
 
+// 정보 변경 신고가 수락(accepted)됐을 때 신고자에게 지급할 포인트 (환경변수로 조정 가능, 기본 30)
+// 반려(dismissed)된 신고에는 지급하지 않는다.
+const POINTS_PER_CHANGE_REPORT = Number.isInteger(parseInt(process.env.POINTS_PER_CHANGE_REPORT))
+  ? parseInt(process.env.POINTS_PER_CHANGE_REPORT)
+  : 30;
+
 async function recordTransaction(client, { userId, reportId, reportTitle, type, amount, reason }) {
   await client.query(
     `INSERT INTO point_transactions (user_id, report_id, report_title, type, amount, reason)
@@ -90,4 +96,36 @@ async function changeReportStatus(client, reportId, newStatus) {
   return { pointsAwarded, pointsRevoked };
 }
 
-module.exports = { POINTS_PER_APPROVAL, revokeAwardedPoints, changeReportStatus };
+/**
+ * 정보 변경 신고 수락 시 신고자에게 포인트를 지급한다. (POINTS_PER_CHANGE_REPORT, 기본 30)
+ * - users.points를 올리고 point_transactions에 earn / change_report_accepted 로 기록한다.
+ * - 중복 지급 방지는 호출하는 쪽 책임: 신고 행을 FOR UPDATE로 잠그고
+ *   status가 'open'일 때만 호출한다(수락은 open → accepted로 한 번만 일어난다).
+ * 지급한 포인트를 반환한다. (설정값이 0 이하이면 지급하지 않고 0)
+ */
+async function awardChangeReportPoints(client, { userId, reportId, reportTitle }) {
+  const amount = POINTS_PER_CHANGE_REPORT;
+  if (amount <= 0) return 0;
+
+  await client.query(
+    'UPDATE users SET points = points + $1 WHERE id = $2',
+    [amount, userId]
+  );
+  await recordTransaction(client, {
+    userId,
+    reportId,
+    reportTitle,
+    type: 'earn',
+    amount,
+    reason: 'change_report_accepted',
+  });
+  return amount;
+}
+
+module.exports = {
+  POINTS_PER_APPROVAL,
+  POINTS_PER_CHANGE_REPORT,
+  revokeAwardedPoints,
+  changeReportStatus,
+  awardChangeReportPoints,
+};
