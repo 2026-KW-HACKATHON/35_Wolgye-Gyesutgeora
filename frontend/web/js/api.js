@@ -45,7 +45,8 @@ const ERROR_MESSAGES = {
   INVALID_USERNAME: '아이디는 영문·숫자·밑줄(_) 4~20자로 입력해 주세요.',
   INVALID_NICKNAME: '닉네임은 2~20자로 입력해 주세요.',
   USERNAME_TAKEN: '이미 사용 중인 아이디예요. 다른 아이디를 입력해 주세요.',
-  NICKNAME_TAKEN: '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.'
+  NICKNAME_TAKEN: '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.',
+  ITEM_NOT_FOUND: '교환할 수 없는 상품이에요.'
 };
 
 function errorMessage(err) {
@@ -56,6 +57,10 @@ function errorMessage(err) {
     if (d.distance_km != null) text += ' 이 위치는 월계1동 중심에서 약 ' + d.distance_km + 'km 떨어져 있어요.';
     if (d.allowed_radius_km != null) text += ' (이용 가능 반경 ' + d.allowed_radius_km + 'km)';
     return text;
+  }
+  if (err.code === 'INSUFFICIENT_POINTS') {
+    const d = err.data || {};
+    return '포인트가 부족해요. (보유 ' + (d.points ?? 0) + 'P / 필요 ' + (d.required ?? '?') + 'P)';
   }
   if (err.code && ERROR_MESSAGES[err.code]) return ERROR_MESSAGES[err.code];
   if (err.status >= 500) return '서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.';
@@ -101,10 +106,13 @@ async function fetchMyReports() {
   return (await apiRequest('/api/reports/mine', { headers: authHeader() })).reports;
 }
 
-// 내 포인트 지급·회수 내역 (2026-10-01 GET /api/points/history 연동됨): [{ type: 'earn'|'revoke', amount, reason, reportTitle, date }] (최신순)
+// 내 포인트 지급·사용 내역 (2026-10-02 GET /api/points/history 연동됨): [{ type: 'earn'|'spend', amount, reason, reportTitle, itemName, date }] (최신순)
+// 지급된 포인트는 회수하지 않기로 확정되어(2026-10-02), 포인트가 줄어드는 경우는 상점 교환(spend)뿐입니다.
+// approval_cancelled·report_deleted는 그 기능이 잠깐 있었을 때 쌓인 과거 내역을 위해 라벨만 남겨둡니다.
 const POINT_REASON_LABEL = {
   report_approved: '제보 승인',
   change_report_accepted: '정보 변경 신고 채택',
+  store_redeem: '지역 상점 교환',
   approval_cancelled: '제보 승인 취소 (반려·중복 처리)',
   report_deleted: '제보 삭제'
 };
@@ -114,10 +122,11 @@ async function fetchPointHistory() {
   // 서버가 이미 최신순으로 주지만, 혹시 몰라 한 번 더 정렬합니다.
   return (data.history || [])
     .map(h => ({
-      type: h.type === 'revoke' ? 'revoke' : 'earn',
+      type: h.type === 'earn' ? 'earn' : h.type,
       amount: Math.abs(Number(h.amount) || 0),
       reason: POINT_REASON_LABEL[h.reason] || h.reason,
       reportTitle: h.report_title || '',
+      itemName: h.item_name || '',
       date: h.created_at
     }))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -125,10 +134,10 @@ async function fetchPointHistory() {
 
 // ----- 상점 -----
 
-// 포인트로 지역 상점 혜택 교환 (⚠️ 백엔드 API 준비 전 — 아직 이 주소가 없어서 404가 나며,
-// 호출한 쪽(js/store.js)이 그 경우를 "화면만 준비됨"으로 안내합니다. js/flag.js, js/route.js와 같은 방식입니다.
-// 상품 목록 자체도 아직 팀이 정하지 않아서, 지금은 프론트에 예시 상품(STORE_ITEMS, js/store.js)만 있습니다.)
-// 기대하는 응답: { user: { points, ... } }  (교환 뒤 최신 포인트를 그대로 돌려주면 화면에 바로 반영됩니다)
+// 포인트로 지역 상점 혜택 교환 (2026-10-02 POST /api/store/redeem 연동됨, 실제 포인트가 차감됩니다).
+// 상품 목록(STORE_ITEMS, js/store.js)은 기획안의 세 후보 방식 예시이고, 설문으로 하나가 정해지면 교체될 예정입니다.
+// 응답: { user: { points, ... }, redemption: { item_id, item_name, cost, created_at } }
+// 실패: 404 ITEM_NOT_FOUND(없는 상품) / 400 INSUFFICIENT_POINTS(포인트 부족, data.points·data.required) / 401(로그인 안 함)
 async function redeemStoreItem(itemId) {
   return apiRequest('/api/store/redeem', {
     method: 'POST',

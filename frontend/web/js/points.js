@@ -1,6 +1,6 @@
 // 포인트 내역 창 (마이페이지의 "포인트 내역 보기"에서 열림)
 // 현재 포인트, 획득 내역, 차감 내역을 보여줍니다. 데이터는 api.js의 fetchPointHistory()(GET /api/points/history)가 가져옵니다.
-// 차감 내역은 지금은 "승인 취소로 회수"만 있고(2026-10-01 백엔드에 추가됨), 포인트 상점이 실제로 연결되면 "사용"도 여기 섞여 나옵니다.
+// 지급된 포인트는 회수하지 않기로 확정되어(2026-10-02), 차감 내역은 지역 상점 교환(spend)만 생깁니다.
 
 const pointSheet = document.getElementById('pointSheet');
 
@@ -16,7 +16,8 @@ function pointRow(e) {
   info.appendChild(reason);
   const sub = document.createElement('div');
   sub.className = 'point-sub';
-  sub.textContent = (e.reportTitle ? e.reportTitle + ' · ' : '') + formatDate(e.date);
+  const label = e.reportTitle || e.itemName || '';
+  sub.textContent = (label ? label + ' · ' : '') + formatDate(e.date);
   info.appendChild(sub);
   row.appendChild(info);
 
@@ -66,7 +67,7 @@ async function openPoints() {
     } catch (e) { /* 실패해도 내역은 보여줍니다 */ }
 
     const earned = entries.filter(e => e.type === 'earn');
-    const deducted = entries.filter(e => e.type === 'revoke');
+    const deducted = entries.filter(e => e.type !== 'earn');
     const earnedSum = earned.reduce((s, e) => s + e.amount, 0);
     const deductedSum = deducted.reduce((s, e) => s + e.amount, 0);
     document.getElementById('pointSum').textContent =

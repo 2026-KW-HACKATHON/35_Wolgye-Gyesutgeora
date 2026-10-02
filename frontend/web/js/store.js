@@ -1,13 +1,12 @@
-// 지역 상점 (포인트 사용) — ⚠️ 뼈대만 먼저 만든 화면입니다.
+// 지역 상점 (포인트 사용)
 //
-// 2026-10-02: 기획팀의 "월계 한걸음 지역상점 포인트 제휴 기획안"을 받아 예시 상품을 그 문서 기준으로 맞췄습니다.
+// 2026-10-02: 기획팀의 "월계 한걸음 지역상점 포인트 제휴 기획안"을 받아 예시 상품을 그 문서 기준으로 맞췄고,
+// 같은 날 백엔드에 POST /api/store/redeem이 실제로 연결되어 지금은 눌러서 바로 교환(포인트 차감)이 됩니다.
 // 기획안은 세 가지 제휴 방식 후보(포인트=금액 할인 / 구간별 할인쿠폰 / 구간별 상품·서비스)를 상점 설문에 부치고,
 // 그 결과로 하나를 고르기로 돼 있습니다(아직 미정). 그래서 지금은 세 후보를 한눈에 비교할 수 있도록
 // 각 방식의 50P 구간 예시를 그대로 하나씩 보여줍니다. 설문 결과로 방식이 정해지면 이 배열을 그 방식 하나로
-// (실제 제휴 상점 이름·혜택으로) 교체하면 됩니다. 기획안 지침대로, 실제 제휴 전까지는 "DEMO"로 표시합니다.
-// - "교환하기"는 실제로 POST /api/store/redeem을 호출해 봅니다(js/api.js의 redeemStoreItem).
-//   백엔드에 이 API가 생기기 전(404)에는 성공한 것처럼 속이지 않고 "화면만 준비됨"을 안내합니다.
-//   (js/flag.js, js/route.js와 같은 screen-first 방식)
+// (실제 제휴 상점 이름·혜택으로) 교체하면 됩니다. item_id는 백엔드 상수와 그대로 맞춰 둬야 합니다.
+// 기획안 지침대로, 실제 제휴 전까지는 "DEMO"로 표시합니다.
 
 const storeSheet = document.getElementById('storeSheet');
 
@@ -116,15 +115,11 @@ async function redeemItem(item, row) {
     }
     setStoreMsg('"' + item.name + '" 교환 완료! 상점에 보여주고 사용하세요.', 'ok');
   } catch (err) {
-    if (err.status === 404) {
-      // 백엔드에 이 API가 아직 없음: 실패를 숨기지 않고 화면만 준비된 상태임을 알려줍니다
-      setStoreMsg('상점 기능은 아직 서버와 연결 전이에요. 백엔드 작업이 끝나면 화면 수정 없이 바로 쓸 수 있어요.');
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    } else if (err.status === 401) {
+    if (err.status === 401) {
       clearSession();
       openAuth('login', '로그인이 만료됐어요. 다시 로그인한 뒤 교환해 주세요.');
     } else {
+      // 400 INSUFFICIENT_POINTS(포인트가 그 사이 줄었을 때), 404 ITEM_NOT_FOUND 등
       setStoreMsg(errorMessage(err));
       btn.disabled = false;
       btn.textContent = originalLabel;

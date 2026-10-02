@@ -382,10 +382,9 @@ async function deleteReport(report, row) {
   const buttons = row.querySelectorAll('.admin-actions button');
   buttons.forEach(b => b.disabled = true);
   try {
-    const res = await apiRequest('/api/reports/' + report.id, { method: 'DELETE', headers: adminAuthHeader() });
+    await apiRequest('/api/reports/' + report.id, { method: 'DELETE', headers: adminAuthHeader() });
     currentReports = currentReports.filter(r => r.id !== report.id);
-    const pointsMsg = res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
-    renderReportList(['삭제했어요.' + pointsMsg, 'ok']);
+    renderReportList(['삭제했어요.', 'ok']);
   } catch (err) {
     if (handleAuthExpiry(err)) return;
     buttons.forEach(b => b.disabled = false);
@@ -414,11 +413,9 @@ async function loadReports() {
 }
 
 async function changeStatus(report, status, row) {
-  // 2026-10-01: 서버가 한때 승인 취소(반려·중복 처리) 시 포인트를 자동 회수하도록 바뀌었는데, 팀 결정(포인트 회수 기능은
-  // 만들지 않기로 함)과 반대라 백엔드에 되돌려 달라고 요청한 상태입니다. 처리 방식이 아직 확정이 아니라
-  // 특정 동작을 단정하지 않는 중립적인 문구로 둡니다. (실제로 회수되면 성공 메시지에 포인트 N점 회수로 표시됨)
+  // 2026-10-02: 백엔드가 포인트 회수 기능을 되돌려서, 승인 취소해도 이미 지급된 포인트는 그대로 유지됩니다.
   if (report.status === 'approved' && status !== 'approved') {
-    if (!confirm('이미 승인되어 포인트가 지급된 제보예요. 계속할까요?')) return;
+    if (!confirm('이미 승인되어 포인트가 지급된 제보예요. 포인트는 자동으로 회수되지 않아요. 계속할까요?')) return;
   }
   const buttons = row.querySelectorAll('.admin-actions button');
   buttons.forEach(b => b.disabled = true);
@@ -434,8 +431,7 @@ async function changeStatus(report, status, row) {
     } else {
       currentReports = currentReports.map(r => r.id === res.report.id ? res.report : r);
     }
-    const pointsMsg = res.points_awarded ? (' (포인트 ' + res.points_awarded + '점 지급)')
-      : res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
+    const pointsMsg = res.points_awarded ? (' (포인트 ' + res.points_awarded + '점 지급)') : '';
     renderReportList([(status === 'approved' ? '승인했어요.' : '반려했어요.') + pointsMsg, 'ok']);
   } catch (err) {
     if (handleAuthExpiry(err)) return;
