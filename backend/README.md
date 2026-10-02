@@ -101,6 +101,7 @@ backend/
 │   ├── 005_point_transactions.sql    # 포인트 내역(point_transactions) + 기존 지급분 이관
 │   ├── 006_report_views.sql          # 조회수 중복 집계 방지(report_views)
 │   ├── 007_change_report_images.sql  # 변경 신고 처리자·처리 시각(resolved_by/resolved_at)
+│   ├── 008_point_spend.sql           # 포인트 사용(spend) 타입 + 교환 상품 컬럼(item_code/item_name)
 │   └── run.js                        # 마이그레이션 실행 스크립트
 ├── scripts/
 │   ├── create-admin.js               # 관리자 계정 생성/승격
@@ -115,6 +116,7 @@ backend/
 │   │   ├── reportController.js       # 제보 등록·목록·상세·조회수, 상태 변경, 관리자 수정·삭제
 │   │   ├── moderationController.js   # 잘못된 정보 신고, 정보 변경 신고(주민 접수 + 관리자 처리)
 │   │   ├── pointController.js        # 내 포인트 내역
+│   │   ├── storeController.js        # 지역 상점 포인트 교환 (상품 목록 상수 포함)
 │   │   ├── routeController.js        # 경로 주변 경고 조회
 │   │   ├── adminUserController.js    # 관리자 회원 목록
 │   │   └── tagController.js          # 태그 목록
@@ -128,11 +130,12 @@ backend/
 │   │   ├── adminRoutes.js
 │   │   ├── pointRoutes.js
 │   │   ├── routeRoutes.js
+│   │   ├── storeRoutes.js
 │   │   └── tagRoutes.js
 │   └── utils/
 │       ├── geo.js                    # Haversine 거리 계산
 │       ├── files.js                  # 업로드 실패 시 파일 삭제
-│       ├── points.js                 # 포인트 지급·회수 공통 로직
+│       ├── points.js                 # 포인트 지급 공통 로직
 │       └── reportContent.js          # 제보 본문 검증·수정 공통 로직
 └── uploads/                          # 제보 사진 저장 위치 (정적 서빙: /uploads/*)
 ```
@@ -150,7 +153,7 @@ backend/
 | `report_images` | 제보 사진 (1건당 최대 3장) |
 | `report_flags` | 잘못된 정보 신고 (사용자당 제보 1건에 1회) |
 | `report_change_reports` | 정보 변경 신고 (처리 전 `open` 신고가 있으면 같은 사용자는 중복 접수 불가) |
-| `point_transactions` | 포인트 지급(`earn`)·회수(`revoke`) 내역 |
+| `point_transactions` | 포인트 지급(`earn`)·사용(`spend`) 내역 |
 | `report_views` | 조회수 중복 집계 방지 (제보·조회자·날짜당 1행) |
 
 ### 제보 상태 (`reports.status`)
@@ -198,9 +201,9 @@ backend/
 | POST | `/` | 🔒 + 지역 검증 | 제보 등록 (multipart, 사진 필수) |
 | POST | `/:id/flags` | 🔒 | 잘못된 정보 신고 |
 | POST | `/:id/change-report` | 🔒 | 정보 변경 신고 (JSON, 1시간 20건) |
-| PATCH | `/:id/status` | 🛡 | 승인·반려·중복 처리 + 포인트 지급·회수 |
+| PATCH | `/:id/status` | 🛡 | 승인·반려·중복 처리 + 승인 시 포인트 지급 |
 | PATCH | `/:id` | 🛡 | 제보 본문 수정 (제목·설명·태그·통행 상태) |
-| DELETE | `/:id` | 🛡 | 제보 삭제 (사진 파일 삭제, 지급 포인트 회수) |
+| DELETE | `/:id` | 🛡 | 제보 삭제 (사진 파일 삭제. 지급 포인트는 유지) |
 
 ### 관리자 `/api/admin` (전체 🛡)
 
@@ -216,7 +219,13 @@ backend/
 
 | 메서드 | 경로 | 인증 | 설명 |
 |---|---|---|---|
-| GET | `/history` | 🔒 | 내 포인트 지급·회수 내역 |
+| GET | `/history` | 🔒 | 내 포인트 지급·사용 내역 |
+
+### 상점 `/api/store`
+
+| 메서드 | 경로 | 인증 | 설명 |
+|---|---|---|---|
+| POST | `/redeem` | 🔒 | 포인트로 지역 상점 혜택 교환 (`{ item_id }`) |
 
 ### 경로 `/api/route`
 
@@ -248,8 +257,8 @@ backend/
 - `PATCH /api/reports/:id/status` (body: `{ "status": "approved" }`)
 - `reports.point_awarded = FALSE` 인 경우에만 포인트 지급 (중복 방지)
 - 지급 포인트: 환경변수 `POINTS_PER_APPROVAL` (기본 10)
-- 승인된 제보를 `rejected`·`duplicate`로 바꾸거나 삭제하면 지급했던 포인트를 회수합니다 (0점 밑으로는 내려가지 않음).
-- 지급·회수는 모두 `point_transactions`에 기록되고 `GET /api/points/history`로 조회합니다.
+- 승인된 제보를 `rejected`·`duplicate`로 바꾸거나 삭제해도 **이미 지급된 포인트는 회수하지 않습니다.** 재승인 시 중복 지급되지도 않습니다.
+- 지급·사용은 모두 `point_transactions`에 기록되고 `GET /api/points/history`로 조회합니다. 포인트가 줄어드는 경우는 상점 교환(`POST /api/store/redeem`, `type: 'spend'`)뿐입니다.
 
 ### 신고 처리 흐름
 
@@ -304,6 +313,7 @@ REGION_RADIUS_KM=50         # 허용 반경 (km) — 현재 테스트 단계라 
 | `RATE_LIMIT_AUTH_MAX` | `20` | 로그인·회원가입 요청 제한 (15분) |
 | `RATE_LIMIT_REPORT_MAX` | `20` | 제보 등록 제한 (1시간) |
 | `RATE_LIMIT_CHANGE_REPORT_MAX` | `20` | 정보 변경 신고 제한 (1시간) |
+| `RATE_LIMIT_STORE_REDEEM_MAX` | `20` | 포인트 교환 제한 (1시간) |
 | `TRUST_PROXY` | 자동(Vercel `1`, 로컬 `0`) | 프록시 신뢰 단계 수. 프록시 뒤에서 IP별 제한이 동작하게 함 |
 
 ---
@@ -316,6 +326,7 @@ REGION_RADIUS_KM=50         # 허용 반경 (km) — 현재 테스트 단계라 
 | 회원가입 / 로그인 | 15분 내 20건 (브루트포스 방어) |
 | 제보 등록 | 1시간 내 20건 |
 | 정보 변경 신고 | 1시간 내 20건 |
+| 포인트 교환 | 1시간 내 20건 |
 
 위 수치는 기본값이며 `RATE_LIMIT_*` 환경변수로 조정합니다. 전시처럼 한 IP(공용 와이파이)에서 많이 접속할 때는 `.env.example`의 권장값을 참고하세요.
 
@@ -323,11 +334,10 @@ REGION_RADIUS_KM=50         # 허용 반경 (km) — 현재 테스트 단계라 
 
 ## 구현 현황과 향후 작업
 
-구현됨: 인증, 제보 등록·조회·조회수, 관리자 승인·반려·수정·삭제, 포인트 지급·회수와 내역, 잘못된 정보 신고, **정보 변경 신고**(접수 + 관리자 수락·반려), 관리자 회원 목록, 경로 주변 경고 조회.
+구현됨: 인증, 제보 등록·조회·조회수, 관리자 승인·반려·수정·삭제, 포인트 지급과 내역, **포인트 상점 교환**, 잘못된 정보 신고, **정보 변경 신고**(접수 + 관리자 수락·반려), 관리자 회원 목록, 경로 주변 경고 조회.
 
 미구현:
 
-- 포인트 사용 (지역 상점 교환 API)
 - 회원 정지·탈퇴 처리 (정책 결정 후)
 - 중복 제보 자동 감지
 - 사진 자동 비식별화 (얼굴·차량번호)

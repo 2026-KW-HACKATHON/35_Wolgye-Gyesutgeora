@@ -1,5 +1,9 @@
-// 제보 상태 변경에 따른 포인트 지급·회수를 한곳에서 처리한다.
+// 제보 상태 변경에 따른 포인트 지급을 한곳에서 처리한다.
 // 반드시 호출하는 쪽에서 연 트랜잭션(BEGIN ~ COMMIT) 안에서 사용할 것.
+//
+// 정책: 한 번 지급한 포인트는 회수하지 않는다.
+//   승인된 제보를 나중에 반려·중복 처리하거나 삭제해도 제보자의 포인트는 그대로 유지한다.
+//   (잘못된 승인은 운영진의 실수이지 제보자의 잘못이 아니므로, 사후 회수 대신 승인 단계에서 걸러낸다)
 
 // 승인 시 지급할 포인트 (환경변수로 조정 가능, 기본 10)
 const POINTS_PER_APPROVAL = parseInt(process.env.POINTS_PER_APPROVAL || '10');
@@ -10,52 +14,32 @@ const POINTS_PER_CHANGE_REPORT = Number.isInteger(parseInt(process.env.POINTS_PE
   ? parseInt(process.env.POINTS_PER_CHANGE_REPORT)
   : 30;
 
-async function recordTransaction(client, { userId, reportId, reportTitle, type, amount, reason }) {
-  await client.query(
-    `INSERT INTO point_transactions (user_id, report_id, report_title, type, amount, reason)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [userId, reportId, reportTitle || null, type, amount, reason]
-  );
-}
-
 /**
- * 지급됐던 포인트를 회수한다. (report는 point_awarded = TRUE인 행이어야 함)
- * - reports.point_awarded를 FALSE로 되돌려 중복 회수를 막는다.
- *   (이후 다시 승인하면 새로 지급되므로 '승인→반려→승인'을 반복해도 포인트가 늘지 않는다)
- * - 포인트는 0 밑으로 내려가지 않는다.
- * 회수한 포인트를 반환한다.
+ * point_transactions에 내역 한 줄을 남긴다.
+ * - 제보 관련 내역(earn)은 reportId / reportTitle을 넘긴다.
+ * - 포인트 사용 내역(spend)은 itemCode / itemName을 넘긴다. (제보와 무관하므로 reportId는 비워 둔다)
  */
-async function revokeAwardedPoints(client, report, reason) {
-  const amount = report.points_amount || 0;
-
+async function recordTransaction(client, {
+  userId, reportId, reportTitle, itemCode, itemName, type, amount, reason,
+}) {
   await client.query(
-    'UPDATE reports SET point_awarded = FALSE, points_amount = 0 WHERE id = $1',
-    [report.id]
+    `INSERT INTO point_transactions
+       (user_id, report_id, report_title, item_code, item_name, type, amount, reason)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [userId, reportId || null, reportTitle || null, itemCode || null, itemName || null, type, amount, reason]
   );
-  if (amount <= 0) return 0;
-
-  await client.query(
-    'UPDATE users SET points = GREATEST(points - $1, 0) WHERE id = $2',
-    [amount, report.user_id]
-  );
-  await recordTransaction(client, {
-    userId: report.user_id,
-    reportId: report.id,
-    reportTitle: report.title,
-    type: 'revoke',
-    amount,
-    reason,
-  });
-  return amount;
 }
 
 /**
  * 제보 상태를 바꾸고 포인트를 정산한다.
  * - approved로 바뀌고 아직 지급 전이면 POINTS_PER_APPROVAL 지급
- * - approved에서 다른 상태(rejected/duplicate/pending)로 바뀌고 지급된 상태면 회수
- * 제보 행을 FOR UPDATE로 잠가 동시에 두 번 처리돼도 지급·회수가 한 번만 일어난다.
+ * - 그 밖의 상태로 바뀔 때는 아무것도 하지 않는다 (지급된 포인트를 회수하지 않는다)
+ * 제보 행을 FOR UPDATE로 잠가 동시에 두 번 처리돼도 지급이 한 번만 일어난다.
  *
- * 반환: 제보가 없으면 null, 있으면 { pointsAwarded, pointsRevoked }
+ * point_awarded는 한 번 TRUE가 되면 되돌리지 않으므로,
+ * '승인 → 반려 → 재승인'을 반복해도 포인트가 중복 지급되지 않는다.
+ *
+ * 반환: 제보가 없으면 null, 있으면 { pointsAwarded }
  */
 async function changeReportStatus(client, reportId, newStatus) {
   const { rows } = await client.query(
@@ -69,7 +53,6 @@ async function changeReportStatus(client, reportId, newStatus) {
   await client.query('UPDATE reports SET status = $1 WHERE id = $2', [newStatus, reportId]);
 
   let pointsAwarded = 0;
-  let pointsRevoked = 0;
 
   if (newStatus === 'approved' && !report.point_awarded) {
     await client.query(
@@ -89,11 +72,9 @@ async function changeReportStatus(client, reportId, newStatus) {
       reason: 'report_approved',
     });
     pointsAwarded = POINTS_PER_APPROVAL;
-  } else if (newStatus !== 'approved' && report.point_awarded) {
-    pointsRevoked = await revokeAwardedPoints(client, report, 'approval_cancelled');
   }
 
-  return { pointsAwarded, pointsRevoked };
+  return { pointsAwarded };
 }
 
 /**
@@ -125,7 +106,7 @@ async function awardChangeReportPoints(client, { userId, reportId, reportTitle }
 module.exports = {
   POINTS_PER_APPROVAL,
   POINTS_PER_CHANGE_REPORT,
-  revokeAwardedPoints,
+  recordTransaction,
   changeReportStatus,
   awardChangeReportPoints,
 };

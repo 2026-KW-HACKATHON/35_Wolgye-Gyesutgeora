@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
-const { changeReportStatus, revokeAwardedPoints } = require('../utils/points');
+const { changeReportStatus } = require('../utils/points');
 const { ContentError, parseTagIds, updateReportContent } = require('../utils/reportContent');
 
 // 업로드 사진 저장 폴더 (upload.js와 동일 규칙)
@@ -278,16 +278,16 @@ async function recordView(req, res) {
 
 /**
  * PATCH /api/reports/:id/status
- * 관리자 전용: 제보 상태 변경 + 승인 시 포인트 지급 / 승인 취소 시 포인트 회수
+ * 관리자 전용: 제보 상태 변경 + 승인 시 포인트 지급
  *
  * body: { status: 'approved' | 'rejected' | 'duplicate' }
  *
  * 승인(approved) 처리 시:
  *   - reports.point_awarded가 FALSE인 경우에만 포인트 지급 (중복 방지)
  *   - users.points += POINTS_PER_APPROVAL, point_transactions에 earn 기록
- * 승인된 제보를 rejected/duplicate로 바꾸면:
- *   - 지급된 포인트만큼 users.points 차감(0 미만 불가), point_transactions에 revoke 기록
- *   - point_awarded를 FALSE로 되돌려 중복 회수를 막고, 다시 승인하면 새로 지급
+ * 승인된 제보를 rejected/duplicate로 바꿔도:
+ *   - 이미 지급된 포인트는 회수하지 않는다 (제보자의 포인트는 그대로 유지)
+ *   - point_awarded도 TRUE로 남으므로 다시 승인해도 중복 지급되지 않는다
  * 실제 처리는 utils/points.js의 changeReportStatus에서 한다.
  */
 async function updateReportStatus(req, res) {
@@ -309,7 +309,7 @@ async function updateReportStatus(req, res) {
   try {
     await client.query('BEGIN');
 
-    // 상태 변경 + 포인트 지급/회수 (제보 행을 잠근 채로 처리)
+    // 상태 변경 + 승인 시 포인트 지급 (제보 행을 잠근 채로 처리)
     const result = await changeReportStatus(client, id, status);
     if (!result) {
       await client.query('ROLLBACK');
@@ -322,7 +322,6 @@ async function updateReportStatus(req, res) {
     return res.json({
       report: updated,
       ...(result.pointsAwarded > 0 && { points_awarded: result.pointsAwarded }),
-      ...(result.pointsRevoked > 0 && { points_revoked: result.pointsRevoked }),
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -341,8 +340,8 @@ async function updateReportStatus(req, res) {
  *   외래키 ON DELETE CASCADE로 함께 삭제됨
  * - 단, uploads/ 폴더의 실제 사진 파일은 DB만으로는 지워지지 않으므로
  *   삭제 전에 파일명을 조회해 두었다가 직접 unlink 한다.
- * - 승인되어 지급된 포인트는 회수한다(users.points 차감 + point_transactions에 revoke 기록).
- *   내역은 제보가 삭제돼도 남는다(report_id는 NULL, 제목은 사본 유지).
+ * - 승인되어 지급된 포인트는 회수하지 않는다 (제보자의 포인트는 그대로 유지).
+ *   지급 내역도 제보가 삭제돼도 남는다(report_id는 NULL, 제목은 사본 유지).
  */
 async function deleteReport(req, res) {
   const { id } = req.params;
@@ -354,17 +353,15 @@ async function deleteReport(req, res) {
   try {
     await client.query('BEGIN');
 
-    // 행을 잠가 동시 승인/삭제와 겹쳐도 포인트가 한 번만 회수되게 한다
+    // 행을 잠가 동시 승인/삭제와 겹쳐도 한 번만 처리되게 한다
     const { rows: exists } = await client.query(
-      `SELECT id, user_id, title, point_awarded, points_amount
-       FROM reports WHERE id = $1 FOR UPDATE`,
+      'SELECT id FROM reports WHERE id = $1 FOR UPDATE',
       [id]
     );
     if (exists.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
-    const report = exists[0];
 
     // 삭제 전에 물리 파일명 확보
     const { rows: images } = await client.query(
@@ -372,12 +369,8 @@ async function deleteReport(req, res) {
       [id]
     );
 
-    // 지급된 포인트 회수 (기록은 report_id가 NULL로 바뀌어도 남음)
-    const pointsRevoked = report.point_awarded
-      ? await revokeAwardedPoints(client, report, 'report_deleted')
-      : 0;
-
     // reports 삭제 → 연관 테이블 CASCADE 삭제
+    // (지급된 포인트는 회수하지 않고, point_transactions의 지급 내역도 그대로 남는다)
     await client.query('DELETE FROM reports WHERE id = $1', [id]);
 
     await client.query('COMMIT');
@@ -391,7 +384,6 @@ async function deleteReport(req, res) {
     return res.json({
       message: '제보를 삭제했습니다.',
       deleted_id: id,
-      ...(pointsRevoked > 0 && { points_revoked: pointsRevoked }),
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

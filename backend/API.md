@@ -156,9 +156,9 @@
 { "status": "approved" }
 ```
 - `status` = `approved` | `rejected` | `duplicate` (`pending`으로 되돌리는 것은 불가)
-- 성공 `200` → `{ "report": {...}, "points_awarded": 10, "points_revoked": 10 }` (`points_awarded`·`points_revoked`는 해당될 때만 포함)
+- 성공 `200` → `{ "report": {...}, "points_awarded": 10 }` (`points_awarded`는 지급했을 때만 포함)
 - **승인**하면 작성자에게 포인트를 지급합니다(기본 10점, 서버 환경변수 `POINTS_PER_APPROVAL`). 같은 제보에 중복 지급되지 않습니다.
-- **승인된 제보를 `rejected`·`duplicate`로 바꾸면** 지급했던 포인트를 회수합니다(0점 밑으로는 내려가지 않음). 다시 승인하면 새로 지급되므로 승인·반려를 반복해도 포인트가 늘지 않습니다.
+- **승인된 제보를 `rejected`·`duplicate`로 바꿔도 이미 지급된 포인트는 회수하지 않습니다.** 제보자의 포인트는 그대로 유지되고, 다시 승인해도 중복 지급되지 않으므로 승인·반려를 반복해도 포인트가 변하지 않습니다.
 
 ### 제보 본문 수정 `PATCH /api/reports/:id` 🔒 관리자
 관리자 "정보 수정". 보낸 항목만 바뀝니다. JSON으로 보냅니다.
@@ -177,8 +177,8 @@
 - 검수 상태(승인·반려)·좌표·사진은 이 API로 바꾸지 않습니다. 상태는 위의 `PATCH /api/reports/:id/status`로 바꿉니다.
 
 ### 제보 삭제 `DELETE /api/reports/:id` 🔒 관리자
-- 태그·사진(파일 포함)·신고 기록을 함께 삭제하고, 승인되어 지급된 포인트가 있으면 회수합니다.
-- 성공 `200` → `{ "message": "제보를 삭제했습니다.", "deleted_id": "uuid", "points_revoked": 10 }` (`points_revoked`는 회수했을 때만 포함)
+- 태그·사진(파일 포함)·신고 기록을 함께 삭제합니다. **승인되어 지급된 포인트는 회수하지 않습니다.**
+- 성공 `200` → `{ "message": "제보를 삭제했습니다.", "deleted_id": "uuid" }`
 - 포인트 내역은 제보가 삭제돼도 남습니다(`report_id`는 `null`, `report_title`은 유지).
 
 ### 잘못된 정보 신고 목록·처리
@@ -204,7 +204,7 @@
   - 수락할 때 `accessibility_status`, `title`, `description`, `tag_ids`(교체할 태그 목록), `status`(제보 검수 상태)를 함께 보내면 **자동 반영 값보다 우선**합니다. 값 규칙은 `PATCH /api/reports/:id`와 같습니다.
   - 태그를 제거하면 제보에 태그가 하나도 남지 않을 때는 `400` `TAGS_WOULD_BE_EMPTY` — `tag_ids`로 새 태그를 지정해서 다시 보내세요. (이때 아무것도 바뀌지 않습니다)
   - 원본 제보의 `updated_at`(최근 확인일)은 항상 새로 찍힙니다.
-  - `status`를 함께 넘기면 위 승인·반려와 똑같이 제보자의 포인트 지급·회수가 처리됩니다.
+  - `status`를 함께 넘기면 위 승인·반려와 똑같이 제보자의 포인트 지급이 처리됩니다(회수는 하지 않습니다).
   - 수락하면 **신고자에게 포인트 30점**을 지급합니다(서버 환경변수 `POINTS_PER_CHANGE_REPORT`, 기본 30). 한 신고에 한 번만 지급됩니다.
 
 ### 회원 목록 `GET /api/admin/users` 🔒 관리자
@@ -232,28 +232,61 @@
 ## 3-1. 포인트
 
 ### 내 포인트 내역 `GET /api/points/history` 🔒
-내 포인트 지급·회수 기록을 최신순으로 돌려줍니다. 조회수는 올라가지 않습니다.
+내 포인트 지급·사용 기록을 최신순으로 돌려줍니다. 조회수는 올라가지 않습니다.
 ```json
 { "history": [ {
   "id": "uuid", "type": "earn", "amount": 10, "reason": "report_approved",
-  "report_id": "uuid", "report_title": "계단", "created_at": "2026-09-20T07:04:53.584Z"
+  "report_id": "uuid", "report_title": "계단", "item_name": "",
+  "created_at": "2026-09-20T07:04:53.584Z"
 }, {
-  "id": "uuid", "type": "revoke", "amount": 10, "reason": "approval_cancelled",
-  "report_id": "uuid", "report_title": "계단", "created_at": "2026-09-21T02:10:11.000Z"
+  "id": "uuid", "type": "spend", "amount": 50, "reason": "store_redeem",
+  "report_id": null, "report_title": "", "item_name": "50원 할인권",
+  "created_at": "2026-10-02T05:10:11.000Z"
 } ] }
 ```
 | type | reason | 의미 |
 |---|---|---|
 | `earn` | `report_approved` | 제보가 승인되어 지급 |
 | `earn` | `change_report_accepted` | 정보 변경 신고가 수락되어 지급 (30점) |
-| `revoke` | `approval_cancelled` | 승인됐던 제보가 반려·중복 처리되어 회수 |
-| `revoke` | `report_deleted` | 승인됐던 제보가 삭제되어 회수 |
+| `spend` | `store_redeem` | 지역 상점에서 교환에 사용 (`item_name`에 상품명) |
 
-- `amount`는 항상 양수이고, 늘었는지 줄었는지는 `type`으로 구분합니다. (`earn`은 +, `revoke`는 −)
+- `amount`는 항상 양수이고, 늘었는지 줄었는지는 `type`으로 구분합니다. (`earn`은 +, `spend`는 −)
+- **지급된 포인트는 회수하지 않습니다.** 승인 취소·제보 삭제로 인한 회수(`type: "revoke"`, `reason: "approval_cancelled"`·`report_deleted`)는 더 이상 쌓이지 않습니다.
+  - ⚠️ 포인트가 줄어드는 경우는 상점 교환(`spend`)뿐입니다. 클라이언트는 `type`이 `earn`이 아니면 차감으로 처리해 주세요.
+- `item_name`은 상점 교환 내역에만 들어가고, 그 밖에는 빈 문자열입니다. 반대로 `report_id`·`report_title`은 상점 교환 내역에서 비어 있습니다.
 - 제보가 삭제된 내역은 `report_id`가 `null`이지만 `report_title`은 남습니다.
-- 정보 변경 신고로 받은 포인트는 그 제보가 나중에 삭제돼도 회수하지 않습니다.
-- 현재는 포인트 사용 기능이 없어 `earn`과 `revoke`만 있습니다.
+- 정보 변경 신고로 받은 포인트는 그 제보가 나중에 삭제돼도 그대로 유지됩니다.
 - 서버가 이 API를 도입하기 전에 이미 지급된 포인트는 `earn` 내역으로 옮겨 담았고, 그 `created_at`은 당시 제보의 `updated_at`입니다.
+
+### 포인트 교환 `POST /api/store/redeem` 🔒
+지역 상점 혜택을 포인트로 교환합니다. **JSON**으로 보냅니다.
+```json
+{ "item_id": "method1_flat_discount" }
+```
+- 성공 `200`
+```json
+{
+  "user": { "id": "uuid", "username": "walker01", "nickname": "길찾기", "role": "user",
+            "points": 10, "created_at": "2026-09-20T07:04:53.584Z" },
+  "redemption": { "item_id": "method1_flat_discount", "item_name": "50원 할인권",
+                  "cost": 50, "created_at": "2026-10-02T05:10:11.000Z" }
+}
+```
+- `user`는 **차감이 끝난 뒤의 값**이므로, 받은 값으로 화면의 포인트를 갱신하면 됩니다. (`GET /api/auth/me`와 같은 형태)
+- 교환 내역은 `GET /api/points/history`에 `type: "spend"` / `reason: "store_redeem"`으로 쌓입니다.
+- 같은 상품을 여러 번 교환하는 데 제한은 없습니다. 1시간에 최대 20건까지 보낼 수 있습니다.
+- `404` `ITEM_NOT_FOUND` 없는 상품(`item_id` 누락 포함) / `400` `INSUFFICIENT_POINTS` 포인트 부족(`points`, `required` 함께 반환) / `401` 로그인 안 함
+- 버튼을 연속으로 눌러도 포인트는 한 번만 차감됩니다.
+
+**현재 상품 (협의 전 예시)** — 기획팀·상점 협의가 끝나지 않아 서버 코드의 상수로 들어 있습니다. 방식이 정해지면 `item_id`는 유지한 채 상품명·금액만 바뀔 수 있습니다.
+
+| item_id | 상품명 | 필요 포인트 |
+|---|---|---|
+| `method1_flat_discount` | 50원 할인권 | 50 |
+| `method2_tier_coupon` | 5,000원 이상 구매 시 500원 할인 | 50 |
+| `method3_tier_product` | 지정 메뉴 또는 상품 추가 혜택 | 50 |
+
+- 상품 목록 조회 API(`GET /api/store/items`)는 상품 내용이 확정되면 추가할 예정입니다.
 
 ## 3-2. 경로 주변 경고
 
@@ -292,6 +325,6 @@
 ## 4. 알아둘 점
 
 - 새 제보는 `status: "pending"`으로 저장되며, 관리자가 승인하기 전까지는 지도 목록·상세에 나오지 않습니다(작성자 본인은 `GET /api/reports/mine`과 상세로 볼 수 있습니다).
-- 포인트는 승인 시 지급되고, 승인이 취소(반려·중복 처리)되거나 제보가 삭제되면 회수됩니다. 현재 포인트는 로그인·`GET /api/auth/me`의 `points`로, 지급·회수 기록은 `GET /api/points/history`로 확인합니다.
+- 포인트는 승인 시 지급되고, **한 번 지급된 포인트는 승인이 취소(반려·중복 처리)되거나 제보가 삭제돼도 회수하지 않습니다.** 포인트가 줄어드는 경우는 상점 교환(`POST /api/store/redeem`)뿐입니다. 현재 포인트는 로그인·`GET /api/auth/me`의 `points`로, 지급·사용 기록은 `GET /api/points/history`로 확인합니다.
 - 사진 파일(`/uploads/...`)은 주소(무작위 UUID 파일명)를 알면 누구나 열 수 있습니다. 미승인 제보의 사진 주소는 위 조회 API로는 나오지 않지만, 파일 자체에 로그인 검사를 하지는 않습니다.
 - 위치 판정은 앱이 보낸 좌표를 믿는 방식이라, 위치 조작 앱을 쓰면 서버에서 막을 수 없습니다.

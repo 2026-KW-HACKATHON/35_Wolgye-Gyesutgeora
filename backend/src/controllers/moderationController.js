@@ -368,8 +368,8 @@ async function adminReviewChangeReport(req, res) {
         return res.status(404).json({ error: '원본 제보를 찾을 수 없습니다.' });
       }
 
-      // 승인 상태 변경은 포인트 지급/회수가 함께 처리되도록 공용 로직을 거친다.
-      // (approved → rejected 등으로 바뀌면 제보자에게 지급된 포인트 회수, 처음 approved가 되면 지급)
+      // 승인 상태 변경은 포인트 지급이 함께 처리되도록 공용 로직을 거친다.
+      // (처음 approved가 되면 제보자에게 지급. 반려·중복으로 바뀌어도 이미 지급된 포인트는 회수하지 않는다)
       if (status) {
         await changeReportStatus(client, changeReport.report_id, status);
       }

@@ -13,6 +13,7 @@ const tagRoutes = require('./routes/tagRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const pointRoutes = require('./routes/pointRoutes');
 const routeRoutes = require('./routes/routeRoutes');
+const storeRoutes = require('./routes/storeRoutes');
 
 const app = express();
 
@@ -77,6 +78,7 @@ const API_MAX = limitFromEnv('RATE_LIMIT_API_MAX', 100);
 const AUTH_MAX = limitFromEnv('RATE_LIMIT_AUTH_MAX', 20);
 const REPORT_MAX = limitFromEnv('RATE_LIMIT_REPORT_MAX', 20);
 const CHANGE_REPORT_MAX = limitFromEnv('RATE_LIMIT_CHANGE_REPORT_MAX', 20);
+const STORE_REDEEM_MAX = limitFromEnv('RATE_LIMIT_STORE_REDEEM_MAX', 20);
 
 // 전체 API: 15분 내 API_MAX건 (기본 100)
 const apiLimiter = rateLimit({
@@ -116,6 +118,16 @@ const changeReportLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: `정보 변경 신고는 1시간에 최대 ${CHANGE_REPORT_MAX}건까지 가능합니다.` },
 });
+// 포인트 교환: 1시간 내 STORE_REDEEM_MAX건 (기본 20)
+const storeRedeemLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: STORE_REDEEM_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: `포인트 교환은 1시간에 최대 ${STORE_REDEEM_MAX}건까지 가능합니다.` },
+});
+app.use('/api/store/redeem', storeRedeemLimiter);
+
 app.use('/api/reports', (req, res, next) => {
   // 이 미들웨어 기준 req.path는 '/api/reports' 이후 경로 → 생성은 정확히 '/'
   if (req.method === 'POST' && req.path === '/') return reportLimiter(req, res, next);
@@ -144,6 +156,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/points', pointRoutes);
 app.use('/api/route', routeRoutes);
+app.use('/api/store', storeRoutes);
 
 // ── 프론트엔드 정적 파일 서빙 (웹 배포) ──────────────────────────────────
 // FRONTEND_DIR 환경변수로 경로 변경 가능. 기본값: ../frontend/web
