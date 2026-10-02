@@ -374,6 +374,10 @@ button:disabled { opacity: .6; cursor: default; }
 
 /* 지역 상점 (뼈대 화면: 상품은 예시) */
 .store-example-note { color: #a35b00; font-weight: 700; }
+.store-demo-badge {
+  display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 8px;
+  border-radius: 10px; background: #a35b00; color: #fff; font-size: 12px; font-weight: 800;
+}
 .store-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .store-item {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;

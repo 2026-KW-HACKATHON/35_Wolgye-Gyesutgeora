@@ -43,6 +43,16 @@ function showLogin() {
   loginForm.reset();
 }
 
+// 토큰이 만료·무효화됐을 때(401) 공통 처리: 에러 문구만 목록 위에 띄우고 로그인된 것처럼 보이게 두지 않고,
+// 세션을 지우고 로그인 화면으로 바로 돌려보냅니다. 401이 아니면 false를 돌려줘서 호출한 쪽이 평소대로 처리하게 합니다.
+function handleAuthExpiry(err) {
+  if (err.status !== 401) return false;
+  clearAdminSession();
+  showLogin();
+  setLoginMsg('로그인이 만료됐어요. 다시 로그인해 주세요.');
+  return true;
+}
+
 async function withBusy(button, task) {
   const label = button.textContent;
   button.disabled = true;
@@ -315,6 +325,7 @@ function buildEditPanel(r) {
       currentReports = currentReports.map(x => x.id === res.report.id ? res.report : x);
       renderReportList(['수정했어요.', 'ok']);
     } catch (err) {
+      if (handleAuthExpiry(err)) return;
       msg.textContent = errorMessage(err);
       msg.className = 'field-msg err';
       saveBtn.disabled = false;
@@ -376,6 +387,7 @@ async function deleteReport(report, row) {
     const pointsMsg = res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
     renderReportList(['삭제했어요.' + pointsMsg, 'ok']);
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     buttons.forEach(b => b.disabled = false);
     setListMsg(errorMessage(err));
   }
@@ -396,6 +408,7 @@ async function loadReports() {
     currentReports = data.reports;
     renderReportList();
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     setListMsg(errorMessage(err));
   }
 }
@@ -425,6 +438,7 @@ async function changeStatus(report, status, row) {
       : res.points_revoked ? (' (포인트 ' + res.points_revoked + '점 회수)') : '';
     renderReportList([(status === 'approved' ? '승인했어요.' : '반려했어요.') + pointsMsg, 'ok']);
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     buttons.forEach(b => b.disabled = false);
     setListMsg(errorMessage(err));
   }
@@ -644,6 +658,7 @@ async function updateFlag(f, status, row) {
     setModMsg(status === 'resolved' ? '처리 완료로 표시했어요.' : '기각했어요.', 'ok');
     refreshModBadge();
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     buttons.forEach(b => b.disabled = false);
     setModMsg(errorMessage(err));
   }
@@ -744,6 +759,7 @@ async function reviewChange(c, action, row, accessibilityStatus) {
     setModMsg(action === 'accept' ? '반영했어요.' : '기각했어요.', 'ok');
     refreshModBadge();
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     buttons.forEach(b => b.disabled = false);
     setModMsg(errorMessage(err));
   }
@@ -771,6 +787,7 @@ async function loadModeration() {
       data.change_reports.forEach(c => list.appendChild(changeRow(c)));
     }
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     setModMsg(errorMessage(err));
   }
 }
@@ -888,6 +905,7 @@ async function loadUsers() {
     }
     renderUserPagination(data.pagination);
   } catch (err) {
+    if (handleAuthExpiry(err)) return;
     setUserMsg(errorMessage(err));
   }
 }

@@ -81,12 +81,14 @@
     </div>
   </div>
 
-  <!-- 지역 상점 (⚠️ 뼈대만 먼저 만든 화면: 상품은 예시, 포인트 사용 API는 백엔드 준비 전 — js/store.js 참고) -->
+  <!-- 지역 상점 (기획안 "월계 한걸음 지역상점 포인트 제휴 기획안" 기준, 2026-10-02.
+       실제 제휴 전까지는 가상 상점(DEMO)으로 표시 — 기획안 5번 항목 지침. 포인트 사용 API는 백엔드 준비 전 — js/store.js 참고) -->
   <div class="sheet-backdrop" id="storeSheet" hidden>
     <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="지역 상점">
       <button class="sheet-close" id="storeClose" type="button" aria-label="닫기">✕</button>
-      <h2 class="sheet-title">지역 상점</h2>
-      <p class="sheet-note small store-example-note">⚠️ 아래 상품은 예시예요. 실제 제휴 상점과 혜택이 정해지면 바뀔 예정이에요.</p>
+      <h2 class="sheet-title">지역 상점 <span class="store-demo-badge">DEMO</span></h2>
+      <p class="sheet-note small store-example-note">⚠️ 가상 상점이에요. 실제 지역상점 제휴는 상점 설문 결과를 바탕으로 정해질 예정이라,
+        아래 혜택은 검토 중인 세 가지 방식의 예시예요.</p>
 
       <div class="points-card">
         <div class="points-label">사용 가능한 포인트</div>
