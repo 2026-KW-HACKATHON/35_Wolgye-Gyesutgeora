@@ -113,7 +113,7 @@ async function redeemItem(item, row) {
       document.getElementById('storePoints').innerHTML = res.user.points + '<span>P</span>';
       renderStoreItems(res.user.points);
     }
-    setStoreMsg('"' + item.name + '" 교환 완료! 상점에 보여주고 사용하세요.', 'ok');
+    setStoreMsg('"' + item.name + '" 교환 완료! "내 쿠폰함 보기"에서 확인하고 상점에 보여주세요.', 'ok');
   } catch (err) {
     if (err.status === 401) {
       clearSession();

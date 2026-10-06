@@ -72,13 +72,14 @@ frontend/web/
   js/search.js     검색란 (제보 검색, 장소 검색)
   js/points.js     포인트 내역 창 (마이페이지에서 열림)
   js/store.js      지역 상점 창 (포인트 내역에서 열림, POST /api/store/redeem 연동됨 — 상품은 설문 전 예시)
+  js/coupons.js    내 쿠폰함 창 (지역 상점에서 열림, 전용 API 없이 포인트 내역의 상점 교환 항목만 모아 보여줌)
   js/flag.js       제보 신고 창 (원래 잘못된 정보 신고·정보 변경 신고 2개였는데 하나로 합침, 서버 저장까지 연동됨)
   js/admin.js      관리자 페이지 로직 (admin.html 전용, 다른 js 파일과 독립적)
   js/main.js       시작점
 ```
 
 `index.html`은 스크립트를 `config → api → tts → map → places → auth → report → pick → route → filter →
-mypage → points → store → flag → search → main` 순서로 불러옵니다. 앞 파일의 함수를 뒤 파일이 쓰므로 순서를 바꾸면 동작하지 않습니다.
+mypage → points → store → coupons → flag → search → main` 순서로 불러옵니다. 앞 파일의 함수를 뒤 파일이 쓰므로 순서를 바꾸면 동작하지 않습니다.
 (`pick.js`는 `report.js`의 전역 `position`을 참조하므로 `report.js` 다음, `route.js`보다 앞이어야 합니다.)
 
 ## 필터 동작
@@ -289,6 +290,9 @@ const BASE_URL = 'http://localhost:3000';
   - 실패: `404 ITEM_NOT_FOUND`(없는 상품) / `400 INSUFFICIENT_POINTS`(포인트 부족, `points`·`required` 포함) / `401`(로그인 만료)
   - 교환 내역은 `GET /api/points/history`에 `type: "spend"`, `reason: "store_redeem"`으로 쌓이고, 포인트 내역 화면의 차감 목록에 상품명과 함께 보입니다.
 - 가진 포인트보다 비싼 상품은 "포인트 부족"으로 표시되고 버튼이 눌리지 않습니다(클라이언트에서 미리 계산, 서버도 한 번 더 확인함).
+- **내 쿠폰함** (2026-10-02 추가, `js/coupons.js`): 지역 상점 화면의 **"내 쿠폰함 보기"**를 누르면 교환한 혜택을 목록으로 보여줍니다.
+  전용 API는 없고, `GET /api/points/history`의 `type: "spend"` 항목만 걸러서 상품명·포인트·날짜·제시용 코드(내역 id 앞 8자리, 서버 검증용은 아님)로
+  보여줍니다. 교환 방식이 설문으로 확정돼도 이 화면은 그대로 쓸 수 있습니다.
 - 2026-09-30 팀 결정: 실제 상점 제휴가 아니라 **가상 상점(데모)으로 구현**하기로 합의됨(기획·디자인 팀 피드백) — 위 기획안으로 공식화됨.
 
 ## 조회수 표시 (제보 늘리기 아이디어)

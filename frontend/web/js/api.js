@@ -122,6 +122,7 @@ async function fetchPointHistory() {
   // 서버가 이미 최신순으로 주지만, 혹시 몰라 한 번 더 정렬합니다.
   return (data.history || [])
     .map(h => ({
+      id: h.id,
       type: h.type === 'earn' ? 'earn' : h.type,
       amount: Math.abs(Number(h.amount) || 0),
       reason: POINT_REASON_LABEL[h.reason] || h.reason,
