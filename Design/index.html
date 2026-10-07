@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>월계 한걸음</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div class="topbar">
+    <div class="topbar-title">월계 한걸음<small>주민이 함께 만드는 생활 보행 지도</small></div>
+    <div class="topbar-user">
+      <button id="mypageBtn" class="auth-btn" type="button" hidden>마이페이지</button>
+      <span id="userName"></span>
+      <button id="authBtn" class="auth-btn" type="button">로그인</button>
+    </div>
+  </div>
+  <!-- 검색란: 제보 검색 + 장소 검색 -->
+  <div class="search-wrap" id="searchWrap">
+    <form id="searchForm" class="search-form" role="search" novalidate>
+      <input id="searchInput" type="text" placeholder="제보·장소 검색 (예: 계단, 월계역)" autocomplete="off" enterkeyhint="search" aria-label="제보 또는 장소 검색">
+      <button id="searchClear" class="search-clear" type="button" aria-label="검색어 지우기" hidden>✕</button>
+    </form>
+    <div class="search-results" id="searchResults" hidden></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-stat" id="legendStat" hidden></div>
+    <div><i style="background:#f57c00"></i>물리적 장애</div>
+    <div><i style="background:#fbc02d"></i>임시 장애물</div>
+    <div><i style="background:#2e9e5b"></i>여성 안심길</div>
+  </div>
+  <button class="route-btn" id="routeBtn" type="button" aria-label="경로 찾기 열기">경로</button>
+  <button class="filter-btn" id="filterBtn" type="button" aria-label="보행환경 필터 열기">필터</button>
+  <button class="locate-btn" id="locateBtn" type="button" aria-label="내 위치로 이동">내 위치</button>
+  <button class="report-btn" id="reportBtn" type="button">제보하기</button>
+  <button class="route-clear-btn" id="routeClearBtn" type="button" hidden>경로 지우기 ✕</button>
+
+  <!-- 마이페이지: 내 제보 목록 + 포인트 -->
+  <div class="sheet-backdrop" id="mypageSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="마이페이지">
+      <button class="sheet-close" id="mypageClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">마이페이지</h2>
+
+      <div class="points-card">
+        <div class="points-label">내 포인트</div>
+        <div class="points-value" id="mypagePoints">0<span>P</span></div>
+        <p class="sheet-note small">제보가 승인되면 포인트가 지급돼요. 앞으로 지역 상점 혜택으로 쓸 수 있어요.</p>
+        <button class="points-more" id="pointsMoreBtn" type="button">포인트 내역 보기 ›</button>
+      </div>
+
+      <div class="section-title">내 제보</div>
+      <div class="field-msg" id="mypageMsg" role="alert"></div>
+      <div id="mypageList"></div>
+    </div>
+  </div>
+
+  <!-- 포인트 내역 (마이페이지 위에 겹쳐서 열림) -->
+  <div class="sheet-backdrop" id="pointSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="포인트 내역">
+      <button class="sheet-close" id="pointClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">포인트 내역</h2>
+
+      <div class="points-card">
+        <div class="points-label">현재 포인트</div>
+        <div class="points-value" id="pointNow">0<span>P</span></div>
+        <div class="points-sum" id="pointSum"></div>
+        <button class="points-more" id="storeOpenBtn" type="button">지역 상점 보기 ›</button>
+      </div>
+
+      <div class="field-msg" id="pointMsg" role="alert"></div>
+
+      <div class="section-title">획득 내역</div>
+      <div id="pointEarnList"></div>
+
+      <div class="section-title">차감 내역</div>
+      <div id="pointUseList"></div>
+    </div>
+  </div>
+
+  <!-- 지역 상점 (기획안 "월계 한걸음 지역상점 포인트 제휴 기획안" 기준, 2026-10-02.
+       실제 제휴 전까지는 가상 상점(DEMO)으로 표시 — 기획안 5번 항목 지침. 포인트 사용 API는 백엔드 준비 전 — js/store.js 참고) -->
+  <div class="sheet-backdrop" id="storeSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="지역 상점">
+      <button class="sheet-close" id="storeClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">지역 상점 <span class="store-demo-badge">DEMO</span></h2>
+      <p class="sheet-note small store-example-note">⚠️ 가상 상점이에요. 실제 지역상점 제휴는 상점 설문 결과를 바탕으로 정해질 예정이라,
+        아래 혜택은 검토 중인 세 가지 방식의 예시예요.</p>
+
+      <div class="points-card">
+        <div class="points-label">사용 가능한 포인트</div>
+        <div class="points-value" id="storePoints">0<span>P</span></div>
+      </div>
+
+      <div class="field-msg" id="storeMsg" role="alert"></div>
+      <div id="storeList" class="store-list"></div>
+    </div>
+  </div>
+
+  <!-- 제보 위치 직접 선택 (전체 화면 지도, 제보 창 위에 겹쳐서 열림) -->
+  <div class="pick-overlay" id="pickSheet" role="dialog" aria-modal="true" aria-label="제보할 위치 선택" hidden>
+    <div id="pickMap"></div>
+    <div class="pick-pin" aria-hidden="true"></div>
+    <div class="pick-top">
+      <button class="pick-back" id="pickCancel" type="button">‹ 취소</button>
+      <div class="pick-title">제보할 위치 선택</div>
+    </div>
+    <div class="pick-search" id="pickSearch">
+      <input id="pickSearchInput" type="text" placeholder="장소로 찾기 (예: 월계역, 광운대)" autocomplete="off" enterkeyhint="search" aria-label="장소 검색">
+      <div class="search-results" id="pickResults" hidden></div>
+    </div>
+    <button class="locate-btn" id="pickLocate" type="button" aria-label="내 위치로 이동">내 위치</button>
+    <div class="pick-bottom">
+      <div class="pick-hint" id="pickHint">지도를 움직여서 빨간 핀이 제보할 곳을 가리키게 해 주세요.</div>
+      <button class="primary" id="pickConfirm" type="button">이 위치로 정하기</button>
+    </div>
+  </div>
+
+  <!-- 제보 신고 창 (원래 "잘못된 정보 신고"·"현장 상황이 바뀌었어요" 2개였는데, 어르신 등 사용자가
+       쉽게 쓰도록 2026-09-30에 하나로 합침. 사유에 따라 js/flag.js가 알아서 맞는 API로 보냅니다) -->
+  <div class="sheet-backdrop" id="flagSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="제보 신고">
+      <button class="sheet-close" id="flagClose" type="button" aria-label="닫기">✕</button>
+
+      <form id="flagForm" novalidate>
+        <h2 class="sheet-title">제보 신고하기</h2>
+        <p class="sheet-note small">이 제보에 대해 알려줄 게 있으면 골라 주세요. 확인 후 처리할게요.</p>
+
+        <div class="section-title">신고 사유 <span class="hint">(하나만 선택)</span></div>
+        <div class="tag-group" id="flagReasonPicker"></div>
+        <div class="field-msg" id="flagReasonMsg" role="alert"></div>
+
+        <div class="section-title">자세한 설명 <span class="hint">(선택)</span></div>
+        <textarea id="flagDesc" name="description" rows="3" maxlength="300" placeholder="예) 계단이 아니라 경사로예요"></textarea>
+
+        <div class="field-msg" id="flagFormMsg" role="alert"></div>
+        <button class="primary" id="flagSubmit" type="submit">신고하기</button>
+      </form>
+
+      <div id="flagDone" class="done" hidden>
+        <div class="done-check" id="flagDoneIcon">✓</div>
+        <h2 class="sheet-title">신고를 확인했어요</h2>
+        <p class="done-summary" id="flagDoneText"></p>
+        <button class="primary" id="flagDoneClose" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 경로 찾기 창 (GET /api/route, 2026-10-01 백엔드 연동됨 — 직선 경로 주변의 제보를 경고로 보여주는 MVP) -->
+  <div class="sheet-backdrop" id="routeSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="경로 찾기">
+      <button class="sheet-close" id="routeClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">경로 찾기</h2>
+      <p class="sheet-note small">출발지와 도착지를 정하면 그 사이 직선 경로 근처에 알려진 보행 불편 구간이 있는지 알려드려요.</p>
+
+      <div class="section-title">출발</div>
+      <div class="route-point" id="routeFromBox">
+        <div class="route-point-text" id="routeFromText">위치를 정해 주세요.</div>
+        <div class="route-point-actions">
+          <button class="check-btn" id="routeFromHere" type="button">현재 위치</button>
+          <button class="check-btn" id="routeFromPick" type="button">지도에서 선택</button>
+        </div>
+      </div>
+
+      <div class="section-title">도착</div>
+      <div class="route-point" id="routeToBox">
+        <div class="route-point-text" id="routeToText">위치를 정해 주세요.</div>
+        <div class="route-point-actions">
+          <button class="check-btn" id="routeToHere" type="button">현재 위치</button>
+          <button class="check-btn" id="routeToPick" type="button">지도에서 선택</button>
+        </div>
+      </div>
+
+      <div class="field-msg" id="routeMsg" role="alert"></div>
+      <button class="primary" id="routeFind" type="button" disabled>경로 찾기</button>
+
+      <div id="routeResult" hidden>
+        <div class="route-summary" id="routeSummary"></div>
+        <div class="section-title">주의할 구간</div>
+        <div id="routeWarnings"></div>
+        <button class="primary" id="routeShowOnMap" type="button">지도에서 보기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 보행환경 필터 창 -->
+  <div class="sheet-backdrop" id="filterSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="보행환경 필터">
+      <button class="sheet-close" id="filterClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">보행환경 필터</h2>
+      <p class="sheet-note small">고른 조건에 맞는 제보만 지도에 보여요. 아무것도 고르지 않으면 전체가 보여요.</p>
+
+      <div id="filterStatusSection">
+        <div class="section-title">통행 상태 <span class="hint">(여러 개 선택 가능)</span></div>
+        <div class="tag-group" id="filterStatus"></div>
+      </div>
+
+      <div class="section-title">불편 유형 <span class="hint">(여러 개 선택 가능)</span></div>
+      <div id="filterTypes"></div>
+      <div class="field-msg" id="filterMsg" role="alert"></div>
+
+      <div class="sheet-footer">
+        <div class="filter-result" id="filterResult" aria-live="polite"></div>
+        <div class="filter-actions">
+          <button class="check-btn" id="filterReset" type="button">초기화</button>
+          <button class="primary" id="filterDone" type="button">지도에서 보기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 제보 등록 창 -->
+  <div class="sheet-backdrop" id="reportSheet" hidden>
+    <div class="sheet report">
+      <button class="sheet-close" id="reportClose" type="button" aria-label="닫기">✕</button>
+
+      <form id="reportForm" novalidate>
+        <h2 class="sheet-title">제보하기</h2>
+
+        <div class="section-title">1. 사진 <span class="hint">(필수, 최대 3장)</span> <span class="hint" id="photoCount">0/3</span></div>
+        <div class="photo-grid" id="photoGrid"></div>
+        <button class="photo-add" id="photoAdd" type="button">📷 사진 찍기 / 고르기</button>
+        <input id="photoInput" type="file" accept="image/*" multiple hidden>
+        <p class="sheet-note small photo-paste-hint">사진을 복사한 뒤 여기서 Ctrl+V(붙여넣기)로도 추가할 수 있어요.</p>
+        <div class="photo-url-row">
+          <input id="photoUrlInput" type="text" inputmode="url" autocomplete="off" placeholder="또는 사진 주소(URL) 붙여넣기">
+          <button id="photoUrlAdd" type="button" class="check-btn">추가</button>
+        </div>
+        <div class="field-msg" id="photoMsg" role="alert"></div>
+
+        <div class="section-title">2. 위치</div>
+        <div class="loc-box loading" id="locBox">
+          <span id="locText">현재 위치를 확인하고 있어요…</span>
+          <button class="check-btn" id="locRetry" type="button">다시 확인</button>
+        </div>
+        <button class="pick-open" id="pickOpen" type="button">🗺 지도에서 직접 위치 선택</button>
+        <div id="miniMap" hidden></div>
+        <div class="loc-address" id="locAddress" hidden></div>
+        <div class="field-msg" id="locMsg" role="alert"></div>
+
+        <div id="statusSection">
+          <div class="section-title">3. 통행 상태 <span class="hint">(필수, 하나만 선택)</span></div>
+          <div class="status-picker" id="statusPicker" role="radiogroup" aria-label="통행 상태"></div>
+          <div class="field-msg" id="statusMsg" role="alert"></div>
+        </div>
+
+        <div class="section-title">4. 어떤 불편이 있나요? <span class="hint">(여러 개 선택 가능)</span></div>
+        <div id="tagPicker"></div>
+        <div class="field-msg" id="tagMsg" role="alert"></div>
+
+        <div class="section-title">5. 설명 <span class="hint">(선택)</span></div>
+        <textarea id="reportDesc" name="description" rows="3" maxlength="300" placeholder="예) 입구에 계단이 5개 있어요"></textarea>
+        <div class="field-msg" id="descMsg" role="alert"></div>
+
+        <div class="sheet-footer">
+          <div class="field-msg" id="reportFormMsg" role="alert"></div>
+          <button class="primary" id="reportSubmit" type="submit">제보 등록하기</button>
+        </div>
+      </form>
+
+      <!-- 제보 완료 화면 -->
+      <div id="reportDone" class="done" hidden>
+        <div class="done-check">✓</div>
+        <h2 class="sheet-title">제보가 등록됐어요</h2>
+        <p class="done-summary" id="doneSummary"></p>
+        <p class="done-celebrate" id="doneCelebrate" hidden></p>
+        <div class="done-points">
+          <strong>포인트 안내</strong>
+          지금은 <b>검토 중</b>이에요. 검토 후 승인되면 지도에 표시되고 포인트가 지급될 예정이에요. 포인트는 나중에 지역 상점 혜택으로 쓸 수 있어요.
+        </div>
+        <p class="sheet-note small">소중한 제보 고마워요. 이웃의 안전한 이동에 큰 도움이 돼요.</p>
+        <button class="check-btn done-share" id="doneShareBtn" type="button">🔗 이웃에게 제보 위치 공유하기</button>
+        <div class="field-msg" id="doneShareMsg" role="alert"></div>
+        <button class="primary" id="doneMapBtn" type="button">지도로 돌아가기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 로그인·회원가입 창 (아래에서 올라오는 시트) -->
+  <div class="sheet-backdrop" id="authSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="로그인 또는 회원가입">
+      <button class="sheet-close" id="authClose" type="button" aria-label="닫기">✕</button>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" id="tabLogin" type="button" role="tab" aria-selected="true">로그인</button>
+        <button class="tab" id="tabRegister" type="button" role="tab" aria-selected="false">회원가입</button>
+      </div>
+      <p class="sheet-note" id="authNote"></p>
+
+      <form id="loginForm" novalidate>
+        <label for="loginUsername">아이디</label>
+        <input id="loginUsername" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+
+        <label for="loginPassword">비밀번호</label>
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password">
+
+        <div class="field-msg" id="loginFormMsg" role="alert"></div>
+        <button class="primary" type="submit">로그인</button>
+      </form>
+
+      <form id="registerForm" novalidate hidden>
+        <label for="regUsername">아이디</label>
+        <div class="row">
+          <input id="regUsername" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="영문·숫자·밑줄 4~20자">
+          <button class="check-btn" id="checkUsernameBtn" type="button">중복 확인</button>
+        </div>
+        <div class="field-msg" id="regUsernameMsg" role="alert"></div>
+
+        <label for="regNickname">닉네임 <span class="hint">(제보자 이름으로 지도에 보여요)</span></label>
+        <div class="row">
+          <input id="regNickname" name="nickname" type="text" autocomplete="nickname" placeholder="2~20자">
+          <button class="check-btn" id="checkNicknameBtn" type="button">중복 확인</button>
+        </div>
+        <div class="field-msg" id="regNicknameMsg" role="alert"></div>
+
+        <label for="regPassword">비밀번호</label>
+        <input id="regPassword" name="password" type="password" autocomplete="new-password" placeholder="8자 이상">
+        <div class="field-msg" id="regPasswordMsg" role="alert"></div>
+
+        <label for="regPassword2">비밀번호 확인</label>
+        <input id="regPassword2" name="password2" type="password" autocomplete="new-password" placeholder="비밀번호를 한 번 더 입력">
+        <div class="field-msg" id="regPassword2Msg" role="alert" aria-live="polite"></div>
+
+        <div class="field-msg" id="regFormMsg" role="alert"></div>
+        <button class="primary" type="submit">가입하기</button>
+        <p class="sheet-note small">개인정보는 받지 않아요. 비밀번호를 잊으면 찾을 수 없으니 꼭 기억해 두세요.</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- 순서 중요: 앞 파일의 함수·변수를 뒤 파일이 사용합니다 -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/tts.js"></script>
+<script src="js/map.js"></script>
+<script src="js/places.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/report.js"></script>
+<script src="js/pick.js"></script>
+<script src="js/route.js"></script>
+<script src="js/filter.js"></script>
+<script src="js/mypage.js"></script>
+<script src="js/points.js"></script>
+<script src="js/store.js"></script>
+<script src="js/flag.js"></script>
+<script src="js/search.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
