@@ -25,11 +25,11 @@ app.use(
       directives: {
         defaultSrc:  ["'self'"],
         scriptSrc:   ["'self'", 'cdnjs.cloudflare.com'],
-        styleSrc:    ["'self'", "'unsafe-inline'", 'cdnjs.cloudflare.com'],
+        styleSrc:    ["'self'", "'unsafe-inline'", 'cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         imgSrc:      ["'self'", 'data:', '*.tile.openstreetmap.org'],
         // 인터넷 장소 검색(Nominatim)만 외부 접속 허용
         connectSrc:  ["'self'", 'https://nominatim.openstreetmap.org'],
-        fontSrc:     ["'self'"],
+        fontSrc:     ["'self'", 'https://fonts.gstatic.com'],
         objectSrc:   ["'none'"],
         upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
       },

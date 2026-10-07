@@ -84,8 +84,13 @@ async function fetchReports() {
 // 응답: { route, route_distance_m, warnings: [{ report_id, title, distance_m, along_m, tags, accessibility_status }],
 //         total_warnings, truncated }
 // 경로의 점이 서비스 지역 밖이면 403 OUT_OF_REGION (errorMessage()가 안내 문구를 만들어 줍니다).
+//
+// radius_m: 2026-10-08, 직선 경로 특성상 기본값(서버 기본 30m)이면 실제로는 안 지나가는 골목의
+// 제보까지 "주의 구간"으로 잡혀서 거의 모든 제보가 뜨는 느낌이 든다는 피드백으로 15m로 좁힘
+// (실측: 855m 샘플 경로에서 30m=9건 → 15m=5건). 백엔드는 그대로이고, 요청 파라미터만 좁힌 것이라
+// 언제든 숫자만 바꿔서 조정할 수 있습니다(서버가 1~200 범위에서 허용).
 async function fetchRoute(fromLat, fromLng, toLat, toLng) {
-  const q = 'from_lat=' + fromLat + '&from_lng=' + fromLng + '&to_lat=' + toLat + '&to_lng=' + toLng;
+  const q = 'from_lat=' + fromLat + '&from_lng=' + fromLng + '&to_lat=' + toLat + '&to_lng=' + toLng + '&radius_m=15';
   return apiRequest('/api/route?' + q);
 }
 
