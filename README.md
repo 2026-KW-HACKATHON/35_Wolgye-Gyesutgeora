@@ -3,7 +3,7 @@
 **골목길에도 이동의 기준이 필요합니다.**
 주민이 함께 만드는 생활 보행 지도 — 2026 KW 해커톤 35조 · 월계 계섯거라
 
-<img src="docs/images/screenshot-map.png" alt="월계 한걸음 지도 화면" width="420">
+<img src="docs/images/banner.png" alt="월계 한걸음 — 골목길에도 이동의 기준이 필요합니다" width="800">
 
 ## 소개
 
