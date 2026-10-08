@@ -532,6 +532,10 @@ button:disabled { opacity: .6; cursor: default; }
 }
 .coupon-item-code { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--primary-deep); letter-spacing: 1px; }
 .coupon-item-date { font-size: 12.5px; color: var(--text-muted); }
+.coupon-qr-btn { display: block; width: 100%; min-height: 40px; margin-top: 8px; font-size: 13.5px; }
+.coupon-item-qr { display: flex; justify-content: center; margin: 10px 0; }
+.coupon-item-qr[hidden] { display: none; }
+.coupon-item-qr img { width: 140px; height: 140px; background: #FAFAFA; border-radius: 6px; padding: 6px; }
 
 .my-card {
   display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border);

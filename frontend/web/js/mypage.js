@@ -31,7 +31,14 @@ function hideReportLocally(id) {
   try { localStorage.setItem(hiddenReportsKey(), JSON.stringify(ids)); } catch (e) { /* 저장 안 돼도 이번 화면에선 반영됨 */ }
 }
 
-function reportCard(r) {
+function unhideReportLocally(id) {
+  const ids = getHiddenReportIds().filter(x => x !== id);
+  try { localStorage.setItem(hiddenReportsKey(), JSON.stringify(ids)); } catch (e) { /* 저장 안 돼도 이번 화면에선 반영됨 */ }
+}
+
+let myShowHidden = false;   // "숨긴 제보 보기" 토글 상태
+
+function reportCard(r, hidden) {
   const card = document.createElement('div');
   card.className = 'my-card';
 
@@ -86,13 +93,22 @@ function reportCard(r) {
   const hideBtn = document.createElement('button');
   hideBtn.className = 'my-hide-btn';
   hideBtn.type = 'button';
-  hideBtn.textContent = '숨기기';
-  hideBtn.setAttribute('aria-label', '이 제보를 내 목록에서 숨기기');
-  hideBtn.addEventListener('click', () => {
-    if (!confirm('이 제보를 내 목록에서 숨길까요? 실제로 삭제되진 않고, 이 목록에서만 안 보이게 됩니다.')) return;
-    hideReportLocally(r.id);
-    renderMyReports();
-  });
+  if (hidden) {
+    hideBtn.textContent = '다시 보이기';
+    hideBtn.setAttribute('aria-label', '이 제보를 내 목록에 다시 보이기');
+    hideBtn.addEventListener('click', () => {
+      unhideReportLocally(r.id);
+      renderMyReports();
+    });
+  } else {
+    hideBtn.textContent = '숨기기';
+    hideBtn.setAttribute('aria-label', '이 제보를 내 목록에서 숨기기');
+    hideBtn.addEventListener('click', () => {
+      if (!confirm('이 제보를 내 목록에서 숨길까요? 실제로 삭제되진 않고, 이 목록에서만 안 보이게 됩니다.')) return;
+      hideReportLocally(r.id);
+      renderMyReports();
+    });
+  }
   card.appendChild(hideBtn);
 
   return card;
@@ -101,8 +117,9 @@ function reportCard(r) {
 function renderMyReports() {
   const list = document.getElementById('mypageList');
   const msg = document.getElementById('mypageMsg');
-  const hidden = getHiddenReportIds();
-  const visible = myReportsAll.filter(r => !hidden.includes(r.id));
+  const hiddenIds = getHiddenReportIds();
+  const visible = myReportsAll.filter(r => !hiddenIds.includes(r.id));
+  const hiddenReports = myReportsAll.filter(r => hiddenIds.includes(r.id));
 
   list.textContent = '';
   if (visible.length === 0) {
@@ -112,6 +129,20 @@ function renderMyReports() {
   } else {
     msg.textContent = '';
     visible.forEach(r => list.appendChild(reportCard(r)));
+  }
+
+  // 숨긴 제보 보기 토글
+  const toggle = document.getElementById('mypageHiddenToggle');
+  const hiddenList = document.getElementById('mypageHiddenList');
+  if (hiddenReports.length === 0) {
+    toggle.hidden = true;
+    myShowHidden = false;
+    hiddenList.textContent = '';
+  } else {
+    toggle.hidden = false;
+    toggle.textContent = myShowHidden ? '숨긴 제보 그만 보기' : '숨긴 제보 보기 (' + hiddenReports.length + '건)';
+    hiddenList.textContent = '';
+    if (myShowHidden) hiddenReports.forEach(r => hiddenList.appendChild(reportCard(r, true)));
   }
 }
 
@@ -152,6 +183,10 @@ function closeMypage() {
 
 document.getElementById('mypageBtn').addEventListener('click', openMypage);
 document.getElementById('mypageClose').addEventListener('click', closeMypage);
+document.getElementById('mypageHiddenToggle').addEventListener('click', () => {
+  myShowHidden = !myShowHidden;
+  renderMyReports();
+});
 document.getElementById('mypageLogoutBtn').addEventListener('click', () => {
   logout();
   closeMypage();
