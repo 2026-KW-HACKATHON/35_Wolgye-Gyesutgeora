@@ -2,5 +2,19 @@
   "name": "wolgye-walkmap",
   "private": true,
   "version": "1.0.0",
-  "description": "월계1동 보행 지도 서비스 — Vercel 배포 루트. 백엔드는 backend/, 프론트엔드는 frontend/web/."
+  "description": "월계1동 보행 지도 서비스 — Vercel 배포 루트. 백엔드는 backend/, 프론트엔드는 frontend/web/.",
+  "dependencies": {
+    "@vercel/blob": "^0.23.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.4.0",
+    "pg": "^8.11.3"
+  }
 }
