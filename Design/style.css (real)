@@ -446,6 +446,86 @@ button:disabled { opacity: .6; cursor: default; }
   background: var(--bg-surface); color: var(--text-main); font-size: 15px; font-family: inherit; cursor: pointer;
 }
 .tag-chip.on {background: var(--primary); border-color: var(--primary);; color: #FAFAFA; font-weight: 700; }
+/* 마커 본체 */
+.category-map-icon__tile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 38px;
+  background: var(--marker-color);
+  border: 2px solid #FAFAFA;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+
+/* 아래쪽 꼭짓점 */
+.category-map-icon__tile::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  left: 13px;
+  bottom: -6px;
+  transform: rotate(45deg);
+  background: var(--marker-color);
+  border-right: 2px solid #FAFAFA;
+  border-bottom: 2px solid #FAFAFA;
+}
+
+/* 아이콘 내부 위치: 기존 % 반영 */
+.category-map-icon__graphic {
+  position: absolute;
+  left: 8.26%;
+  right: 8.34%;
+  top: 12.44%;
+  bottom: 12.5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.category-map-icon__graphic svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 지도 범례용 작은 아이콘 */
+.category-legend-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 6px;
+  justify-content: center;
+  align-items: center;
+  color: #FAFAFA;
+  background: #78909c;
+  flex: 0 0 auto;
+}
+
+.category-legend-icon.physical {
+  background: #d32f2f;
+}
+
+.category-legend-icon.temp {
+  background: #fbc02d;
+  color: #332900;
+}
+
+.category-legend-icon.safe {
+  background: #2e9e5b;
+}
+
+.category-legend-icon.other {
+  background: #78909c;
+}
+
+.category-legend-icon svg {
+  width: 100%;
+  height: 100%;
+}
 
 
 .sheet textarea {
@@ -730,3 +810,36 @@ html.text-lg .profile-btn { font-size: 18px; }
 /* 온보딩(서비스 소개) 화면 — "글씨 크게" 기능을 만든 뒤에 추가된 화면이라 아래에 따로 넣음 */
 html.text-lg .onboard-legend { font-size: 15px; }
 html.text-lg .onboard-action-btn { font-size: 15.5px; }
+/* 지도 마커 */
+.category-marker-leaflet {
+  background: transparent;
+  border: 0;
+}
+
+.category-map-icon {
+  --marker-color: #78909c;
+  --marker-ink: #FAFAFA;
+  position: relative;
+  width: 40px;
+  height: 44px;
+  color: var(--marker-ink);
+}
+
+/* 유형별 색상 */
+.category-map-icon.physical {
+  --marker-color: #d32f2f;
+}
+
+.category-map-icon.temp {
+  --marker-color: #fbc02d;
+  --marker-ink: #332900;
+}
+
+.category-map-icon.safe {
+  --marker-color: #2e9e5b;
+}
+
+.category-map-icon.other {
+  --marker-color: #78909c;
+}
+

@@ -35,13 +35,30 @@ function formatDate(iso) {
 }
 
 // 마커 색: 태그 분류로 결정
-function markerColor(codes) {
-  const cats = codes.map(c => (tagInfo[c] || {}).category);
-  if (cats.includes('physical')) return COLOR.physical;
-  if (cats.includes('temp')) return COLOR.temp;
-  if (codes.includes('safety_path')) return COLOR.safe;
-  return COLOR.other;
+function markerCategory(codes) {
+  const tags = Array.isArray(codes) ? codes : [];
+  const categories = tags.map(code => (tagInfo[code] || {}).category);
+
+  if (categories.includes('physical')) return 'physical';
+  if (categories.includes('temp')) return 'temp';
+  if (tags.includes('safety_path')) return 'safe';
+  return 'other';
 }
+
+const CATEGORY_MARKER_ICONS = {
+  physical: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h5v-5h5v-5h5V5h3"/></svg>',
+  temp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 20h18L12 3Z"/><path d="M10 10h4M8 15h8"/></svg>',
+  safe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 20 5v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
+  other: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 10v7"/><path d="M12 7h.01"/><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"/></svg>'
+};
+
+const CATEGORY_MARKER_LABELS = {
+  physical: '물리적 장애',
+  temp: '임시 장애물',
+  safe: '여성 안심길',
+  other: '기타'
+};
+
 
 // 서버에서 받은 글자를 화면에 넣을 때는 항상 textContent로 (악성 문자 방지)
 // 팝업 내용을 자연스러운 한 문장으로 엮어서 음성으로 읽기 좋게 만듭니다 (js/tts.js가 실제로 읽어요)
@@ -286,14 +303,27 @@ function renderReports(reports) {
   Object.keys(markersById).forEach(id => delete markersById[id]);
   Object.keys(reportsById).forEach(id => delete reportsById[id]);
   visibleReports().forEach(r => {
-    const icon = L.divIcon({
-      className: '',
-      html: '<div class="pin" style="background:' + markerColor(r.tags) + '"></div>',
-      iconSize: [26, 26], iconAnchor: [13, 13]
-    });
-    const marker = L.marker([r.latitude, r.longitude], { icon })
-      .on('click', () => openReportSheet(r))
-      .addTo(markerLayer);
+   
+const category = markerCategory(r.tags);
+
+const icon = L.divIcon({
+  className: 'category-marker-leaflet',
+  html: '<div class="category-map-icon ' + category + '">' +
+        '<div class="category-map-icon__tile">' +
+        '<span class="category-map-icon__graphic" aria-hidden="true">' +
+        CATEGORY_MARKER_ICONS[category] +
+        '</span></div></div>',
+  iconSize: [40, 44],
+  iconAnchor: [20, 44]
+});
+
+const marker = L.marker([r.latitude, r.longitude], {
+  icon,
+  title: CATEGORY_MARKER_LABELS[category]
+})
+  .on('click', () => openReportSheet(r))
+  .addTo(markerLayer);
+
     markersById[r.id] = marker;
     reportsById[r.id] = r;
   });

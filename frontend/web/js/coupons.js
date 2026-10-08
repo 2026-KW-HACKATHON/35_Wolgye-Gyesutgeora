@@ -22,6 +22,20 @@ function couponCode(id) {
   return (id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
+// 쿠폰을 QR로도 보여줍니다 (2026-10-08 추가, 사용자 요청).
+// 서버 쪽 쿠폰 검증 API가 없어서 지금은 스캔 결과를 아무도 확인하지 않지만, 화면으로 코드를 읽기 어려운
+// 분들을 위해 QR도 함께 보여주면 상점에서 바코드 리더기로 찍어 코드만 확인하는 용도로 쓸 수 있습니다.
+// 내역 id 전체를 그대로 인코딩합니다(화면에 보이는 짧은 코드보다 안 겹침).
+function couponQrImgTag(id) {
+  if (typeof qrcode !== 'function') return '';
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(id || '');
+    qr.make();
+    return qr.createImgTag(4, 2);
+  } catch (e) { return ''; }
+}
+
 function couponRow(e) {
   const card = document.createElement('div');
   card.className = 'coupon-item';
@@ -38,17 +52,36 @@ function couponRow(e) {
   top.appendChild(cost);
   card.appendChild(top);
 
-  const bottom = document.createElement('div');
-  bottom.className = 'coupon-item-bottom';
-  const code = document.createElement('div');
-  code.className = 'coupon-item-code';
-  code.textContent = '제시 코드 ' + couponCode(e.id);
-  bottom.appendChild(code);
   const date = document.createElement('div');
   date.className = 'coupon-item-date';
   date.textContent = formatDate(e.date);
-  bottom.appendChild(date);
-  card.appendChild(bottom);
+  card.appendChild(date);
+
+  // 코드·QR은 전부 접어 두고, 버튼 하나로 한꺼번에 펼칩니다 (쿠폰이 여러 개면 다 펼쳐져 지저분해 보인다는 의견, 2026-10-08)
+  const detailBtn = document.createElement('button');
+  detailBtn.className = 'check-btn coupon-qr-btn';
+  detailBtn.type = 'button';
+  detailBtn.textContent = '제시 코드·QR 보기';
+  card.appendChild(detailBtn);
+
+  const detailWrap = document.createElement('div');
+  detailWrap.className = 'coupon-item-detail';
+  detailWrap.hidden = true;
+  const code = document.createElement('div');
+  code.className = 'coupon-item-code';
+  code.textContent = '제시 코드 ' + couponCode(e.id);
+  detailWrap.appendChild(code);
+  const qrWrap = document.createElement('div');
+  qrWrap.className = 'coupon-item-qr';
+  detailWrap.appendChild(qrWrap);
+  card.appendChild(detailWrap);
+
+  detailBtn.addEventListener('click', () => {
+    const willShow = detailWrap.hidden;
+    if (willShow && !qrWrap.innerHTML) qrWrap.innerHTML = couponQrImgTag(e.id);
+    detailWrap.hidden = !willShow;
+    detailBtn.textContent = willShow ? '접기' : '제시 코드·QR 보기';
+  });
 
   return card;
 }
