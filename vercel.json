@@ -4,8 +4,8 @@
   "outputDirectory": "frontend/web",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api?__rewritePath=:path*"
+      "source": "/api/(.*)",
+      "destination": "/api"
     }
   ],
   "functions": {
