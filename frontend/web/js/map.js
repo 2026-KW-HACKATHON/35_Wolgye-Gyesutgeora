@@ -249,7 +249,8 @@ function popupContent(r) {
   flagBtn.type = 'button';
   flagBtn.className = 'popup-flag';
   flagBtn.textContent = '제보 신고';
-  flagBtn.addEventListener('click', () => openFlag(r.id));
+  // 제보 신고 창을 열 때 제보 상세 창이 안 닫히면 그 뒤에 깔려 버려서(2026-10-08 버그), 먼저 닫고 엽니다
+  flagBtn.addEventListener('click', () => { closeReportSheet(); openFlag(r.id); });
   box.appendChild(flagBtn);
   return box;
 }
