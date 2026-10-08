@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api"
+      "destination": "/api?__rewritePath=:path*"
     }
   ],
   "functions": {
