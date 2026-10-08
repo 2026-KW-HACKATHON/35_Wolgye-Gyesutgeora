@@ -17,8 +17,17 @@ const storeRoutes = require('./routes/storeRoutes');
 
 const app = express();
 
+// ── 프록시 신뢰 ──────────────────────────────────────────────────────────
+// Vercel 등 프록시 뒤에 있으면 req.ip 가 프록시 IP 가 되어 rate limit 이
+// 모두 하나로 뭉칩니다. TRUST_PROXY 환경변수로 신뢰할 홉 수를 지정하거나,
+// Vercel 환경(VERCEL=1 자동 주입)에서는 1로 자동 설정합니다.
+const trustProxy = process.env.TRUST_PROXY !== undefined
+  ? Number(process.env.TRUST_PROXY)
+  : (process.env.VERCEL ? 1 : 0);
+app.set('trust proxy', trustProxy);
+
 // ── 보안 헤더 (웹 브라우저 대상) ───────────────────────────────────────────
-// 프론트엔드가 같은 서버에서 서빙되므로 CSP를 명시적으로 설정
+// 프론트엔드가 같은 Vercel 프로젝트에서 서빙되므로 CSP 를 명시적으로 설정합니다.
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -26,7 +35,8 @@ app.use(
         defaultSrc:  ["'self'"],
         scriptSrc:   ["'self'", 'cdnjs.cloudflare.com'],
         styleSrc:    ["'self'", "'unsafe-inline'", 'cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
-        imgSrc:      ["'self'", 'data:', '*.tile.openstreetmap.org'],
+        // 제보 사진이 Vercel Blob 에 저장되므로 그 도메인도 허용합니다.
+        imgSrc:      ["'self'", 'data:', '*.tile.openstreetmap.org', '*.public.blob.vercel-storage.com'],
         // 인터넷 장소 검색(Nominatim)만 외부 접속 허용
         connectSrc:  ["'self'", 'https://nominatim.openstreetmap.org'],
         fontSrc:     ["'self'", 'https://fonts.gstatic.com'],
@@ -43,9 +53,10 @@ app.use(
 app.use(compression());
 
 // ── CORS ─────────────────────────────────────────────────────────────────
-// 프론트를 같은 서버에서 서빙하면 CORS 불필요.
-// 외부 클라이언트(앱, 개발용 로컬 서버 등)가 필요하면 .env의 CORS_ORIGIN에
-// 쉼표로 구분해 추가: CORS_ORIGIN=https://example.com,http://localhost:5173
+// 프론트를 같은 서버/프로젝트에서 서빙하면 CORS 불필요 (same-origin).
+// 외부 클라이언트(앱, 개발용 로컬 서버 등)가 필요하면 .env / Vercel 환경변수의
+// CORS_ORIGIN 에 쉼표로 구분해 추가합니다:
+//   CORS_ORIGIN=https://example.com,http://localhost:5173
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map(o => o.trim())
@@ -142,10 +153,6 @@ app.use('/api/reports', (req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ── 업로드 사진 정적 서빙 ─────────────────────────────────────────────────
-const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
-app.use('/uploads', express.static(UPLOAD_DIR));
-
 // ── 헬스체크 ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -158,21 +165,27 @@ app.use('/api/points', pointRoutes);
 app.use('/api/route', routeRoutes);
 app.use('/api/store', storeRoutes);
 
-// ── 프론트엔드 정적 파일 서빙 (웹 배포) ──────────────────────────────────
-// FRONTEND_DIR 환경변수로 경로 변경 가능. 기본값: ../frontend/web
-const FRONTEND_DIR = process.env.FRONTEND_DIR
-  ? path.resolve(process.env.FRONTEND_DIR)
-  : path.join(__dirname, '../../frontend/web');
+// ── 프론트엔드 정적 파일 서빙 (로컬 개발 전용) ────────────────────────────
+// Vercel 에서는 Output Directory(frontend/web)를 Vercel CDN 이 직접 서빙하므로
+// Express 는 /api/* 만 처리합니다. 로컬에서는 한 포트로 전부 띄우기 위해 아래
+// 정적 서빙·SPA 폴백을 활성화합니다. SERVE_FRONTEND=false 로 끌 수 있습니다.
+// 사진(/uploads)은 Vercel Blob 으로 이전됐으므로 정적 서빙하지 않습니다.
+const shouldServeFrontend =
+  !process.env.VERCEL && process.env.SERVE_FRONTEND !== 'false';
 
-app.use(express.static(FRONTEND_DIR));
+if (shouldServeFrontend) {
+  const FRONTEND_DIR = process.env.FRONTEND_DIR
+    ? path.resolve(process.env.FRONTEND_DIR)
+    : path.join(__dirname, '../../frontend/web');
 
-// SPA Fallback: /api, /uploads 외 모든 GET → index.html
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
-    return next();
-  }
-  res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
-});
+  app.use(express.static(FRONTEND_DIR));
+
+  // SPA Fallback: /api 외 모든 GET → index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+  });
+}
 
 // ── 404 ───────────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -202,7 +215,14 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 });
 
+// ── 서버 기동 ─────────────────────────────────────────────────────────────
+// 서버리스(Vercel) 환경에서는 app 자체를 핸들러로 export 하고 listen 하지 않습니다.
+// 로컬에서 `node src/index.js` 로 직접 실행할 때만 listen 합니다.
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`월계1동 보행 지도 서버 실행 중: http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`월계1동 보행 지도 서버 실행 중: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

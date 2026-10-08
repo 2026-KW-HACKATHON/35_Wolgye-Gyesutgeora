@@ -1,13 +1,9 @@
-const fs = require('fs');
 const crypto = require('crypto');
-const path = require('path');
 const pool = require('../config/db');
 const { removeUploadedFiles } = require('../utils/files');
+const { saveImage, deleteImage } = require('../utils/storage');
 const { changeReportStatus } = require('../utils/points');
 const { ContentError, parseTagIds, updateReportContent } = require('../utils/reportContent');
-
-// 업로드 사진 저장 폴더 (upload.js와 동일 규칙)
-const UPLOAD_DIR = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
 
 const STATUSES = ['pending', 'approved', 'rejected', 'duplicate'];
 const ACCESSIBILITY_STATUSES = ['passable', 'inconvenient', 'impassable'];
@@ -25,11 +21,16 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *     title?, description?,
  *     tag_ids (comma-separated),
  *     images (files, 최대 3장)
+ *
+ * 사진은 multer memoryStorage 로 받은 뒤 Vercel Blob 에 업로드합니다.
+ * - report_images.filename = Blob 삭제·식별용 key (예: reports/<uuid>.jpg)
+ * - report_images.url      = 공개 접근 URL (예: https://xxx.public.blob.vercel-storage.com/reports/<uuid>.jpg)
  */
 async function createReport(req, res) {
   const { latitude, longitude, title, description, tag_ids, accessibility_status } = req.body;
   const userId = req.user.id;
   const files = req.files || [];
+  req.uploadedKeys = []; // 롤백용 (removeUploadedFiles 가 참조)
 
   if (files.length === 0) {
     return res.status(400).json({ error: '사진을 최소 1장 첨부해야 합니다.' });
@@ -37,7 +38,6 @@ async function createReport(req, res) {
 
   // accessibility_status 값 검증 (전달된 경우에만)
   if (accessibility_status && !ACCESSIBILITY_STATUSES.includes(accessibility_status)) {
-    removeUploadedFiles(req);
     return res.status(400).json({
       error: `accessibility_status는 ${ACCESSIBILITY_STATUSES.join(', ')} 중 하나여야 합니다.`,
     });
@@ -45,16 +45,24 @@ async function createReport(req, res) {
 
   const tagIdList = [...new Set(parseTagIds(tag_ids))];
   if (tagIdList.length === 0) {
-    removeUploadedFiles(req);
     return res.status(400).json({ error: '태그를 최소 1개 이상 선택해야 합니다.' });
   }
 
   const client = await pool.connect();
+  let committed = false;
   try {
     const valid = await client.query('SELECT id FROM tags WHERE id = ANY($1::int[])', [tagIdList]);
     if (valid.rows.length !== tagIdList.length) {
-      removeUploadedFiles(req);
       return res.status(400).json({ error: '존재하지 않는 태그가 포함되어 있습니다.' });
+    }
+
+    // DB 트랜잭션을 시작하기 전에 Blob 에 먼저 올립니다.
+    // 트랜잭션이 실패하거나 중간에 에러가 나면 finally 에서 올라간 Blob 을 되돌립니다.
+    const uploaded = [];
+    for (const file of files) {
+      const r = await saveImage(file);
+      uploaded.push({ ...r, originalname: file.originalname });
+      req.uploadedKeys.push(r.key);
     }
 
     await client.query('BEGIN');
@@ -75,27 +83,31 @@ async function createReport(req, res) {
       );
     }
 
-    // 이미지 연결
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    // 이미지 레코드 (filename 에 Blob key, url 에 공개 URL 저장)
+    for (let i = 0; i < uploaded.length; i++) {
+      const u = uploaded[i];
       await client.query(
         `INSERT INTO report_images (report_id, filename, original, url, sort_order)
          VALUES ($1, $2, $3, $4, $5)`,
-        [report.id, file.filename, file.originalname, `/uploads/${file.filename}`, i]
+        [report.id, u.key, u.originalname, u.url, i]
       );
     }
 
     await client.query('COMMIT');
+    committed = true;
 
     const full = await getReportById(report.id);
     return res.status(201).json({ report: full });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    removeUploadedFiles(req);
     console.error(err);
     return res.status(500).json({ error: '서버 오류' });
   } finally {
     client.release();
+    if (!committed) {
+      // 커밋 전에 올라간 Blob 이 있으면 되돌림. 실패해도 응답 흐름은 유지.
+      await removeUploadedFiles(req).catch(() => {});
+    }
   }
 }
 
@@ -338,8 +350,8 @@ async function updateReportStatus(req, res) {
  *
  * - report_tags / report_images / report_flags / report_change_reports 는
  *   외래키 ON DELETE CASCADE로 함께 삭제됨
- * - 단, uploads/ 폴더의 실제 사진 파일은 DB만으로는 지워지지 않으므로
- *   삭제 전에 파일명을 조회해 두었다가 직접 unlink 한다.
+ * - 단, Vercel Blob 의 실제 사진 파일은 DB만으로는 지워지지 않으므로
+ *   삭제 전에 filename(= Blob key)을 조회해 두었다가 Blob 삭제 호출.
  * - 승인되어 지급된 포인트는 회수하지 않는다 (제보자의 포인트는 그대로 유지).
  *   지급 내역도 제보가 삭제돼도 남는다(report_id는 NULL, 제목은 사본 유지).
  */
@@ -363,7 +375,7 @@ async function deleteReport(req, res) {
       return res.status(404).json({ error: '제보를 찾을 수 없습니다.' });
     }
 
-    // 삭제 전에 물리 파일명 확보
+    // 삭제 전에 Blob key(= filename) 확보
     const { rows: images } = await client.query(
       'SELECT filename FROM report_images WHERE report_id = $1',
       [id]
@@ -375,10 +387,12 @@ async function deleteReport(req, res) {
 
     await client.query('COMMIT');
 
-    // DB에서 지운 뒤 실제 사진 파일 삭제 (실패해도 요청은 성공 처리)
+    // DB에서 지운 뒤 Blob 실제 파일 삭제 (실패해도 요청은 성공 처리)
+    // 레거시(마이그레이션 전) 레코드는 filename 에 로컬 디스크 파일명이 들어 있을 수
+    // 있는데, 그 경우 Blob del 은 404 로 조용히 실패하므로 큰 문제가 되지 않는다.
     for (const img of images) {
       if (!img.filename) continue;
-      fs.unlink(path.join(UPLOAD_DIR, img.filename), () => {});
+      deleteImage(img.filename); // await 하지 않음 — 응답을 블로킹하지 않음
     }
 
     return res.json({

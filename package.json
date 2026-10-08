@@ -1,0 +1,6 @@
+{
+  "name": "wolgye-walkmap",
+  "private": true,
+  "version": "1.0.0",
+  "description": "월계1동 보행 지도 서비스 — Vercel 배포 루트. 백엔드는 backend/, 프론트엔드는 frontend/web/."
+}

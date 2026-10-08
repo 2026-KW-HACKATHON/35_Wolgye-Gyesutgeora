@@ -6,9 +6,11 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "migrate": "node migrations/run.js"
+    "migrate": "node migrations/run.js",
+    "migrate:uploads-to-blob": "node scripts/migrate-uploads-to-blob.js"
   },
   "dependencies": {
+    "@vercel/blob": "^0.23.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",

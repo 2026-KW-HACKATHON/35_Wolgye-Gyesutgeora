@@ -1,11 +1,16 @@
 /**
  * 마이그레이션 실행 스크립트
  * 사용법: node migrations/run.js
+ *
+ * Neon/Supabase 등 클라우드 PostgreSQL 에 적용할 때는 .env 에 DB_SSL=true 를
+ * 추가해 두세요 (클라우드 DB 는 SSL 을 요구합니다).
  */
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+
+const useSSL = process.env.DB_SSL === 'true';
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -13,6 +18,7 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
 async function runMigrations() {
