@@ -70,7 +70,12 @@ body {
 .profile-btn {
   width: 40px; height: 40px; flex: 0 0 auto; border-radius: 50%; border: 1.5px solid var(--primary);
   background: var(--primary); color: #FAFAFA; font-size: 19px; font-weight: 800; font-family: inherit;
-  display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+  align-items: center; justify-content: center; padding: 0; cursor: pointer;
+}
+/* [hidden] 속성으로 안 보이게 처리된 상태에선 display:none 이 이겨야 하므로,
+   flex 는 hidden 이 아닐 때만 적용합니다 (2026-10-09, 로그아웃 상태에서도 빈 버튼이 계속 보이던 버그 수정) */
+.profile-btn:not([hidden]) {
+  display: flex;
 }
 .profile-btn svg { width: 20px; height: 20px; fill: #FAFAFA; }
 .profile-btn:active { opacity: .85; }
