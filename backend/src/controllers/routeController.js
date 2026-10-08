@@ -78,7 +78,7 @@ function parseIntParam(raw, def, min, max) {
 async function getRoute(req, res) {
   const parsed = parsePoints(req.query);
   if (parsed.error) {
-    return res.status(400).json({ error: parsed.error, code: 'INVALID_ROUTE' });
+    return res.status(400).json({ error: parsed.error, code: 'INVALID_ROUTE', _debugQuery: req.query, _debugUrl: req.originalUrl });
   }
   let { points, fromTmap } = parsed;
 
