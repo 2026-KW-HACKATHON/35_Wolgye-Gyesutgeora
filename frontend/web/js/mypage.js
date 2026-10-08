@@ -46,7 +46,7 @@ function reportCard(r, hidden) {
   thumb.className = 'my-thumb';
   if (r.images && r.images[0]) {
     const img = document.createElement('img');
-    img.src = BASE_URL + r.images[0];
+    img.src = imageUrl(r.images[0]);
     img.alt = '';
     img.addEventListener('error', () => { thumb.textContent = '사진 없음'; img.remove(); });
     thumb.appendChild(img);

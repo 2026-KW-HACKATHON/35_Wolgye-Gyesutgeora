@@ -39,9 +39,35 @@ function searchReports(q) {
 
 // ----- 결과 목록 그리기 -----
 
+// 검색 결과가 떠 있는 동안은 범례 박스가 화면을 복잡해 보이게 한다는 의견으로, 검색 중엔 잠깐 숨겨 둡니다
+// (사용자가 그 전에 직접 닫아 둔 상태였다면 검색이 끝나도 계속 닫힌 채로 둡니다 — 범례 다시 보기 버튼만 복원)
+let legendHiddenForSearch = false;
+
+function hideLegendForSearch() {
+  const legendBox = document.getElementById('legendBox');
+  const legendReopen = document.getElementById('legendReopen');
+  if (!legendBox.hidden) {
+    legendBox.hidden = true;
+    legendHiddenForSearch = true;
+  }
+  legendReopen.hidden = true;
+}
+
+function restoreLegendAfterSearch() {
+  const legendBox = document.getElementById('legendBox');
+  const legendReopen = document.getElementById('legendReopen');
+  if (legendHiddenForSearch) {
+    legendBox.hidden = false;
+    legendHiddenForSearch = false;
+  } else if (legendBox.hidden) {
+    legendReopen.hidden = false;
+  }
+}
+
 function clearResults() {
   searchResults.hidden = true;
   searchResults.textContent = '';
+  restoreLegendAfterSearch();
 }
 
 function addNote(text, isErr) {
@@ -105,6 +131,7 @@ function renderResults(q) {
   // 장소: 월계 주요 장소(바로) + 인터넷 검색(눌렀을 때만). 장소를 고르면 지도가 그곳으로 이동합니다
   appendPlaceResults(searchResults, q, p => goToPlace(p.lat, p.lng, p.name));
   searchResults.hidden = false;
+  hideLegendForSearch();
 }
 
 // ----- 장소 검색 -----

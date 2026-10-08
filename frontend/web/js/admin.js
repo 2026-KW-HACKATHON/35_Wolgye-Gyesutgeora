@@ -118,7 +118,7 @@ function reportRow(r) {
   if (r.images && r.images.length) {
     r.images.forEach(path => {
       const img = document.createElement('img');
-      img.src = BASE_URL + path;
+      img.src = imageUrl(path);
       img.alt = '제보 사진';
       img.addEventListener('error', () => img.remove());
       photos.appendChild(img);
@@ -550,7 +550,7 @@ function modThumb(url) {
   box.className = 'admin-photos';
   if (url) {
     const img = document.createElement('img');
-    img.src = BASE_URL + url;
+    img.src = imageUrl(url);
     img.alt = '제보 사진';
     img.addEventListener('error', () => img.remove());
     box.appendChild(img);
