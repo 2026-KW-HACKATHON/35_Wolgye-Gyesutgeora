@@ -291,12 +291,14 @@
 ## 3-2. 경로 주변 경고
 
 ### 경로 경고 조회 `GET /api/route`
-로그인 불필요. 경로(선분) 가까이에 있는 **승인(approved)된 제보**를 `warnings`로 돌려줍니다.
+로그인 불필요. 경로 가까이에 있는 **승인(approved)된 제보**를 `warnings`로 돌려줍니다.
+
+출발·도착 좌표(`from/to`)를 넘기면 서버가 TMAP 보행자 길찾기 API로 **실제 보행로 폴리라인**을 만들어 `route`로 함께 돌려주고, 그 폴리라인을 기준으로 주변 제보를 걸러냅니다. 폴리라인을 직접 지정하고 싶을 때는 `path`를 쓰면 TMAP 호출 없이 그대로 사용합니다.
 
 | 쿼리 | 필수 | 설명 |
 |---|---|---|
-| from_lat, from_lng, to_lat, to_lng | ✅* | 출발지→도착지 직선 경로 |
-| path | ✅* | `위도,경도;위도,경도;...` 점 2~200개를 잇는 경로. 있으면 from/to보다 우선 |
+| from_lat, from_lng, to_lat, to_lng | ✅* | 출발지→도착지. 서버가 TMAP으로 실제 보행 경로 폴리라인을 만듭니다 |
+| path | ✅* | `위도,경도;위도,경도;...` 점 2~200개를 잇는 폴리라인. 있으면 from/to보다 우선 (TMAP 호출 안 함) |
 | radius_m | | 경로에서 이 거리(m) 이내 제보만 포함. 기본 30, 1~200 |
 | limit | | warnings 최대 개수. 기본 20, 1~50 |
 
@@ -304,8 +306,8 @@
 
 ```json
 {
-  "route": [ [37.6215, 127.0605], [37.6215, 127.063] ],
-  "route_distance_m": 220,
+  "route": [ [37.6215, 127.0605], [37.6216, 127.0609], [37.6218, 127.0617], [37.6215, 127.063] ],
+  "route_distance_m": 240,
   "radius_m": 30,
   "warnings": [ {
     "report_id": "uuid", "title": "계단", "latitude": 37.6215, "longitude": 127.061,
@@ -316,11 +318,19 @@
   "truncated": false
 }
 ```
+- `route`는 `[[위도, 경도], ...]` 폴리라인입니다. `from/to` 모드에서는 TMAP이 돌려준 보행로이고, `path` 모드에서는 호출자가 보낸 좌표 그대로입니다. 최대 200점, 연속한 중복점은 서버에서 제거됩니다.
+- `route_distance_m`은 `from/to` 모드에서는 TMAP의 총 보행 거리(m), `path` 모드에서는 서버가 좌표로 계산한 길이(m)입니다.
 - `warnings`는 경로를 따라가는 순서(`along_m`: 출발지부터의 거리 m)로 정렬됩니다. `distance_m`은 경로에서 떨어진 거리입니다.
 - 조건에 맞는 제보가 `limit`보다 많으면 앞에서부터 `limit`개만 주고 `truncated: true`, 전체 개수는 `total_warnings`로 알려줍니다.
-- 경로의 점 중 하나라도 서비스 지역 밖이면 `403` `OUT_OF_REGION` (`distance_km`, `allowed_radius_km` 함께 반환)
+- 서비스 지역 검사는 **입력 좌표(from·to 또는 path의 각 점)에만** 적용됩니다. TMAP이 돌려주는 중간 점은 월계1동 경계를 소폭 벗어난 소로를 지날 수 있어 검사하지 않습니다.
+- 입력 좌표 중 하나라도 서비스 지역 밖이면 `403` `OUT_OF_REGION` (`distance_km`, `allowed_radius_km` 함께 반환)
 - 좌표·`radius_m`·`limit` 형식 오류는 `400` `INVALID_ROUTE`
-- 직선 경로 기준이며 실제 보행로를 따라 안내하는 길찾기는 아닙니다 (MVP).
+- TMAP 호출 관련 오류 (from/to 모드):
+  - `503` `ROUTING_UNAVAILABLE` : 서버에 `TMAP_APP_KEY`가 설정되지 않음. `reason: "KEY_NOT_CONFIGURED"` 포함
+  - `404` `NO_ROUTE_FOUND` : TMAP이 출발·도착 사이의 보행 경로를 찾지 못함
+  - `502` `UPSTREAM_ERROR` : TMAP 네트워크·타임아웃·4xx/5xx 등
+- 서버는 같은 (출발·도착) 좌표에 대한 반복 호출을 짧은 시간 동안 캐시합니다(기본 10분). 캐시는 서버 프로세스 재시작 시 비워집니다.
+- 1시간당 IP별 호출 횟수는 기본 120건으로 제한됩니다(환경변수 `RATE_LIMIT_ROUTE_MAX`로 조정).
 
 ## 4. 알아둘 점
 
