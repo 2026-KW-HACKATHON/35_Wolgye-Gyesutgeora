@@ -1,16 +1,16 @@
-// 경로 찾기: 출발·도착을 정하고, 그 사이 직선 경로 근처에 알려진 보행 불편 구간이 있는지 서버에 물어봅니다.
-// 위치 선택은 js/pick.js의 전체 화면 지도를 그대로 재사용합니다.
+// 경로 찾기: 출발·도착을 정하면 서버가 실제 보행로를 계산해서 그 근처에 알려진 보행 불편 구간이
+// 있는지 알려줍니다. 위치 선택은 js/pick.js의 전체 화면 지도를 그대로 재사용합니다.
 //
-// GET /api/route (2026-10-01 백엔드 연동됨). 실제 길찾기(보행로를 따라가는 경로 계산)는 아니고,
-// 출발→도착 직선 근처의 승인된 제보를 "주의할 구간"으로 보여주는 MVP입니다.
+// GET /api/route (2026-10-01 백엔드 연동, 2026-10-08 TMAP 보행자 길찾기로 실제 보행로 계산하도록 개선됨).
 
 const routeSheet = document.getElementById('routeSheet');
 
 let routeFrom = null;        // { lat, lng, label? }
 let routeTo = null;
-let lastRouteCoords = null;  // 마지막으로 받은 경로 좌표들 ("지도에서 보기"를 누르면 그릴 것)
-let routeLine = null;        // 지도에 그려진 경로 선 (Leaflet polyline)
-let routeEndMarkers = [];    // 지도에 그려진 출발·도착 표시
+let lastRouteCoords = null;    // 마지막으로 받은 경로 좌표들 ("지도에서 보기"를 누르면 그릴 것)
+let lastRouteWarnings = [];    // 마지막 결과의 주의 구간들 (지도에서 강조 표시할 때 씀)
+let routeLine = null;          // 지도에 그려진 경로 선 (Leaflet polyline)
+let routeEndMarkers = [];      // 지도에 그려진 출발·도착 표시
 
 function routePointLabel(p) {
   return p ? (p.label || (p.lat.toFixed(5) + ', ' + p.lng.toFixed(5))) : '위치를 정해 주세요.';
@@ -78,12 +78,7 @@ async function findRoute() {
     setRouteMsg('');
     showRouteResult(data);
   } catch (err) {
-    if (err.status === 404) {
-      // 혹시 서버에 이 기능이 아직 없다면(연결 전 환경 등), 실패를 숨기지 않고 알려줍니다
-      setRouteMsg('경로 추천 기능은 아직 서버와 연결 전이에요. 백엔드 작업이 끝나면 화면 수정 없이 바로 쓸 수 있어요.');
-    } else {
-      setRouteMsg(errorMessage(err));
-    }
+    setRouteMsg(errorMessage(err));
   } finally {
     document.getElementById('routeFind').disabled = !(routeFrom && routeTo);
   }
@@ -121,6 +116,7 @@ function routeWarningRow(w) {
 
 function showRouteResult(data) {
   lastRouteCoords = (data && data.route) || null;
+  lastRouteWarnings = (data && data.warnings) || [];
 
   const summary = document.getElementById('routeSummary');
   const distText = data && data.route_distance_m != null ? '경로 길이 약 ' + Math.round(data.route_distance_m) + 'm' : '';
@@ -150,17 +146,26 @@ function showRouteResult(data) {
 
 // ----- 지도에 경로 그리기 / 지우기 -----
 
+// 경로 표시 때문에 지도에서 숨겼던 제보 마커를 전부 다시 보여줍니다 (경로 지우기 / 다시 그리기 전에 씀)
+function restoreHiddenReportMarkers() {
+  Object.keys(markersById).forEach(id => {
+    const marker = markersById[id];
+    if (!markerLayer.hasLayer(marker)) markerLayer.addLayer(marker);
+  });
+}
+
 function clearRoute() {
   if (routeLine) { routeLine.remove(); routeLine = null; }
   routeEndMarkers.forEach(m => m.remove());
   routeEndMarkers = [];
   document.getElementById('routeClearBtn').hidden = true;
+  restoreHiddenReportMarkers();
 }
 
 function drawRouteOnMap() {
   if (!lastRouteCoords || lastRouteCoords.length === 0) return;
   clearRoute();
-  routeLine = L.polyline(lastRouteCoords, { color: '#2f6fed', weight: 5, opacity: 0.85 }).addTo(map);
+  routeLine = L.polyline(lastRouteCoords, { color: '#007EFF', weight: 5, opacity: 0.85 }).addTo(map);
 
   const dot = (ll, cls) => L.marker(ll, {
     icon: L.divIcon({ className: '', html: '<div class="' + cls + '"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
@@ -168,6 +173,18 @@ function drawRouteOnMap() {
   }).addTo(map);
   routeEndMarkers.push(dot(lastRouteCoords[0], 'route-dot route-dot-start'));
   routeEndMarkers.push(dot(lastRouteCoords[lastRouteCoords.length - 1], 'route-dot route-dot-end'));
+
+  // 이 경로의 주의 구간이 아닌 제보는 지도에서 완전히 숨겨서, 경로와 상관없는 제보와 섞여 보이지 않게 합니다
+  // ("경로를 그려도 동네 전체 제보가 똑같이 다 보여서 무분별해 보인다"는 피드백 반영, 2026-10-08)
+  const warnIds = new Set(lastRouteWarnings.map(w => w.report_id));
+  Object.keys(markersById).forEach(id => {
+    const marker = markersById[id];
+    if (warnIds.has(id)) {
+      if (!markerLayer.hasLayer(marker)) markerLayer.addLayer(marker);
+    } else {
+      markerLayer.removeLayer(marker);
+    }
+  });
 
   map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
   document.getElementById('routeClearBtn').hidden = false;

@@ -11,6 +11,26 @@ const REVIEW_STATUS = {
   duplicate: { label: '중복 제보', cls: 'rejected' }
 };
 
+// "내 제보" 목록에서만 안 보이게 숨기는 기능 (2026-10-08 추가).
+// 실제로 서버 제보를 삭제하는 게 아니라 — 삭제는 관리자만 가능함(backend/API.md 참고) — 이 계정의
+// 마이페이지 목록에서만 가리는 것입니다. 브라우저에 로컬로 저장되므로 다른 기기에서는 다시 보입니다.
+let myReportsAll = [];
+
+function hiddenReportsKey() {
+  const user = getUser();
+  return 'wg_hidden_reports_' + ((user || {}).id || (user || {}).username || 'anon');
+}
+
+function getHiddenReportIds() {
+  try { return JSON.parse(localStorage.getItem(hiddenReportsKey())) || []; } catch (e) { return []; }
+}
+
+function hideReportLocally(id) {
+  const ids = getHiddenReportIds();
+  if (!ids.includes(id)) ids.push(id);
+  try { localStorage.setItem(hiddenReportsKey(), JSON.stringify(ids)); } catch (e) { /* 저장 안 돼도 이번 화면에선 반영됨 */ }
+}
+
 function reportCard(r) {
   const card = document.createElement('div');
   card.className = 'my-card';
@@ -62,12 +82,44 @@ function reportCard(r) {
   body.appendChild(meta);
 
   card.appendChild(body);
+
+  const hideBtn = document.createElement('button');
+  hideBtn.className = 'my-hide-btn';
+  hideBtn.type = 'button';
+  hideBtn.textContent = '숨기기';
+  hideBtn.setAttribute('aria-label', '이 제보를 내 목록에서 숨기기');
+  hideBtn.addEventListener('click', () => {
+    if (!confirm('이 제보를 내 목록에서 숨길까요? 실제로 삭제되진 않고, 이 목록에서만 안 보이게 됩니다.')) return;
+    hideReportLocally(r.id);
+    renderMyReports();
+  });
+  card.appendChild(hideBtn);
+
   return card;
+}
+
+function renderMyReports() {
+  const list = document.getElementById('mypageList');
+  const msg = document.getElementById('mypageMsg');
+  const hidden = getHiddenReportIds();
+  const visible = myReportsAll.filter(r => !hidden.includes(r.id));
+
+  list.textContent = '';
+  if (visible.length === 0) {
+    msg.textContent = myReportsAll.length === 0
+      ? '아직 등록한 제보가 없어요. 제보하기 버튼으로 첫 제보를 남겨 보세요.'
+      : '숨긴 제보만 있어요.';
+  } else {
+    msg.textContent = '';
+    visible.forEach(r => list.appendChild(reportCard(r)));
+  }
 }
 
 async function openMypage() {
   mypageSheet.hidden = false;
-  document.getElementById('mypagePoints').innerHTML = ((getUser() || {}).points ?? 0) + '<span>P</span>';
+  const user = getUser();
+  document.getElementById('mypageNickname').textContent = user ? user.nickname + '님' : '';
+  document.getElementById('mypagePoints').innerHTML = ((user || {}).points ?? 0) + '<span>P</span>';
 
   const list = document.getElementById('mypageList');
   const msg = document.getElementById('mypageMsg');
@@ -78,7 +130,7 @@ async function openMypage() {
   try {
     // 태그 이름 표시를 위해 태그 정보가 없으면 먼저 받습니다
     if (!allTags.length) setTagInfo(await fetchTags());
-    const reports = await fetchMyReports();
+    myReportsAll = await fetchMyReports();
 
     // 최신 포인트로 갱신 (제보 승인 후 다시 로그인하지 않아도 반영되도록)
     try {
@@ -87,12 +139,7 @@ async function openMypage() {
       document.getElementById('mypagePoints').innerHTML = user.points + '<span>P</span>';
     } catch (e) { /* 실패해도 목록은 보여줍니다 */ }
 
-    msg.textContent = '';
-    if (reports.length === 0) {
-      msg.textContent = '아직 등록한 제보가 없어요. 제보하기 버튼으로 첫 제보를 남겨 보세요.';
-    } else {
-      reports.forEach(r => list.appendChild(reportCard(r)));
-    }
+    renderMyReports();
   } catch (err) {
     msg.textContent = errorMessage(err);
     msg.className = 'field-msg err';
@@ -105,6 +152,10 @@ function closeMypage() {
 
 document.getElementById('mypageBtn').addEventListener('click', openMypage);
 document.getElementById('mypageClose').addEventListener('click', closeMypage);
+document.getElementById('mypageLogoutBtn').addEventListener('click', () => {
+  logout();
+  closeMypage();
+});
 mypageSheet.addEventListener('click', e => { if (e.target === mypageSheet) closeMypage(); });
 // 포인트 내역(pointSheet, js/points.js)이 위에 열려 있으면 Esc는 그 창만 닫습니다
 document.addEventListener('keydown', e => {

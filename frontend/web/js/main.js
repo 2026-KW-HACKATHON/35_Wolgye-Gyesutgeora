@@ -31,6 +31,7 @@ function showToast(msg, ms, action) {
 }
 
 // 참여 현황 표시: "이번 달 제보 N건 · 지금까지 M건" (지도에 이미 받아 온 제보로 계산, 별도 API 없음)
+// 한 문장이고, 폭이 모자라면 CSS(word-break: keep-all)가 띄어쓰기 단위로 다음 줄로 넘깁니다.
 function updateLegendStat(reports) {
   const el = document.getElementById('legendStat');
   if (!reports || reports.length === 0) { el.hidden = true; return; }
@@ -39,9 +40,20 @@ function updateLegendStat(reports) {
     const d = new Date(r.created_at);
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   }).length;
-  el.textContent = '이번 달 제보 ' + thisMonth + '건 · 지금까지 ' + reports.length + '건';
+  // "지금까지"와 숫자 사이는 줄이 바뀌어도 떨어지지 않게 특수 공백( )으로 붙여 둡니다
+  el.textContent = '이번 달 제보 ' + thisMonth + '건 · 지금까지 ' + reports.length + '건';
   el.hidden = false;
 }
+
+// 범례(지도 아이콘 설명) 닫기/다시 보기 — 2026-10-08 추가, 가릴 수 있게 해달라는 피드백
+document.getElementById('legendClose').addEventListener('click', () => {
+  document.getElementById('legendBox').hidden = true;
+  document.getElementById('legendReopen').hidden = false;
+});
+document.getElementById('legendReopen').addEventListener('click', () => {
+  document.getElementById('legendBox').hidden = false;
+  document.getElementById('legendReopen').hidden = true;
+});
 
 // 공유 링크(?report=id)로 들어온 경우, 데이터를 불러온 뒤 그 제보로 이동합니다
 function focusSharedReportFromUrl() {
@@ -77,8 +89,11 @@ document.getElementById('reportBtn').addEventListener('click', () => {
 });
 
 // 내 위치 버튼: 시작할 때 위치를 못 받았거나 권한을 거부한 경우 다시 시도할 수 있습니다
+// GPS 정확도를 위해 시간이 좀 걸릴 수 있어서("느리다"는 피드백), 확인하는 동안 안내를 보여줍니다.
 document.getElementById('locateBtn').addEventListener('click', () => {
-  locateMe(msg => showToast(msg, 5000));
+  const loading = showToast('현재 위치를 확인하는 중…');
+  const done = () => { if (loading.isConnected) loading.remove(); };
+  locateMe(msg => { done(); showToast(msg, 5000); }, done);
 });
 
 // 지도 그림(타일)이 안 뜨면 한 번만 안내합니다 (안내 후 15초 동안은 다시 안내하지 않음)
@@ -94,4 +109,5 @@ baseLayer.on('tileerror', () => {
   locateMe();          // 시작할 때 실패해도 안내 없이 기본 위치로 시작 (내 위치 버튼으로 재시도)
   restoreSession();
   loadMapData();
+  maybeShowOnboard();
 })();

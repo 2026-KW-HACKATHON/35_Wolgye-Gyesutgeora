@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="js/textsize-init.js"></script>
 </head>
 <body>
 <div id="app">
@@ -16,37 +17,72 @@
   <div class="topbar">
     <div class="topbar-title">월계 한걸음<small>주민이 함께 만드는 생활 보행 지도</small></div>
     <div class="topbar-user">
-      <button id="mypageBtn" class="auth-btn" type="button" hidden>마이페이지</button>
-      <span id="userName"></span>
+      <button id="mypageBtn" class="profile-btn" type="button" hidden aria-label="마이페이지"></button>
       <button id="authBtn" class="auth-btn" type="button">로그인</button>
     </div>
   </div>
   <!-- 검색란: 제보 검색 + 장소 검색 -->
   <div class="search-wrap" id="searchWrap">
-    <form id="searchForm" class="search-form" role="search" novalidate>
-      <input id="searchInput" type="text" placeholder="제보·장소 검색 (예: 계단, 월계역)" autocomplete="off" enterkeyhint="search" aria-label="제보 또는 장소 검색">
-      <button id="searchClear" class="search-clear" type="button" aria-label="검색어 지우기" hidden>✕</button>
-    </form>
+    <div class="search-row">
+      <form id="searchForm" class="search-form" role="search" novalidate>
+        <input id="searchInput" type="text" placeholder="제보·장소 검색 (예: 계단, 월계역)" autocomplete="off" enterkeyhint="search" aria-label="제보 또는 장소 검색">
+        <button id="searchClear" class="search-clear" type="button" aria-label="검색어 지우기" hidden>✕</button>
+      </form>
+      <button class="route-btn" id="routeBtn" type="button" aria-label="경로 찾기 열기">➤</button>
+    </div>
     <div class="search-results" id="searchResults" hidden></div>
   </div>
 
-  <div class="legend">
+  <div class="legend" id="legendBox">
+    <button class="legend-close" id="legendClose" type="button" aria-label="범례 닫기">✕</button>
     <div class="legend-stat" id="legendStat" hidden></div>
     <div><i style="background:#f57c00"></i>물리적 장애</div>
     <div><i style="background:#fbc02d"></i>임시 장애물</div>
     <div><i style="background:#2e9e5b"></i>여성 안심길</div>
+    <div><i style="background:#78909c"></i>기타</div>
   </div>
-  <button class="route-btn" id="routeBtn" type="button" aria-label="경로 찾기 열기">경로</button>
+  <button class="legend-reopen" id="legendReopen" type="button" aria-label="범례 다시 보기" hidden>범례</button>
+  <button class="text-size-btn" id="textSizeBtn" type="button" aria-pressed="false" aria-label="글씨 크게 보기">글씨 크게</button>
   <button class="filter-btn" id="filterBtn" type="button" aria-label="보행환경 필터 열기">필터</button>
   <button class="locate-btn" id="locateBtn" type="button" aria-label="내 위치로 이동">내 위치</button>
   <button class="report-btn" id="reportBtn" type="button">제보하기</button>
   <button class="route-clear-btn" id="routeClearBtn" type="button" hidden>경로 지우기 ✕</button>
+
+  <!-- 처음 접속한 사용자에게 보여주는 서비스 소개 (2026-10-08 추가, "처음 보면 어떤 웹인지 알기 힘들다"는 피드백) -->
+  <div class="sheet-backdrop" id="onboardSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="월계 한걸음 소개">
+      <button class="sheet-close" id="onboardClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="sheet-title">월계 한걸음</h2>
+      <p class="sheet-note small">주민이 함께 만드는 생활 보행 지도</p>
+      <p class="sheet-note">계단·턱·좁은 길처럼 걷기 불편한 곳을 사진과 위치로 제보하고, 다른 주민들이 미리 확인할 수 있는 서비스예요.
+        경로를 찾을 땐 주의 구간도 알려주고, 제보가 승인되면 포인트도 쌓여요.</p>
+
+      <div class="section-title">지도 아이콘 안내</div>
+      <div class="onboard-legend">
+        <div><i style="background:#f57c00"></i>물리적 장애</div>
+        <div><i style="background:#fbc02d"></i>임시 장애물</div>
+        <div><i style="background:#2e9e5b"></i>여성 안심길</div>
+        <div><i style="background:#78909c"></i>기타</div>
+      </div>
+
+      <div class="onboard-actions">
+        <button class="onboard-action-btn" id="onboardReport" type="button">
+          <span class="icon">📷</span>제보하러 가기
+        </button>
+        <button class="onboard-action-btn" id="onboardBrowse" type="button">
+          <span class="icon">🗺️</span>지도 둘러보기
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- 마이페이지: 내 제보 목록 + 포인트 -->
   <div class="sheet-backdrop" id="mypageSheet" hidden>
     <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="마이페이지">
       <button class="sheet-close" id="mypageClose" type="button" aria-label="닫기">✕</button>
       <h2 class="sheet-title">마이페이지</h2>
+      <p class="mypage-nickname" id="mypageNickname"></p>
+      <button class="mypage-logout" id="mypageLogoutBtn" type="button">로그아웃</button>
 
       <div class="points-card">
         <div class="points-label">내 포인트</div>
@@ -76,6 +112,7 @@
       </div>
 
       <div class="field-msg" id="pointMsg" role="alert"></div>
+      <button class="point-range-toggle" id="pointRangeToggle" type="button" hidden></button>
 
       <div class="section-title">획득 내역</div>
       <div id="pointEarnList"></div>
@@ -201,6 +238,21 @@
         <button class="primary" id="routeShowOnMap" type="button">지도에서 보기</button>
       </div>
     </div>
+  </div>
+
+  <!-- 제보 상세(마커 팝업) — 2026-10-08: 기존 Leaflet 팝업이 마커 위치에 따라 상단바·검색창과 겹쳐서
+       보기 힘들다는 피드백으로, 다른 화면과 똑같이 아래에서 올라오는 시트로 바꿨습니다. -->
+  <div class="sheet-backdrop" id="reportDetailSheet" hidden>
+    <div class="sheet sheet-flush" role="dialog" aria-modal="true" aria-label="제보 상세">
+      <button class="sheet-close" id="reportDetailClose" type="button" aria-label="닫기">✕</button>
+      <div id="reportDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- 사진 크게 보기 (2026-10-08 추가, 제보 상세 시트의 사진을 누르면 열림) -->
+  <div class="lightbox" id="photoLightbox" hidden role="dialog" aria-modal="true" aria-label="사진 크게 보기">
+    <button class="lightbox-close" id="photoLightboxClose" type="button" aria-label="닫기">✕</button>
+    <img id="photoLightboxImg" alt="제보 사진 크게 보기">
   </div>
 
   <!-- 보행환경 필터 창 -->
@@ -352,6 +404,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <!-- 순서 중요: 앞 파일의 함수·변수를 뒤 파일이 사용합니다 -->
 <script src="js/config.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/textsize.js"></script>
 <script src="js/api.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/map.js"></script>
@@ -367,6 +421,7 @@
 <script src="js/coupons.js"></script>
 <script src="js/flag.js"></script>
 <script src="js/search.js"></script>
+<script src="js/onboard.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

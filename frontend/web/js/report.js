@@ -180,7 +180,7 @@ function showMiniMap(lat, lng, accuracy) {
       icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
       interactive: false, keyboard: false
     }).addTo(miniMap);
-    miniCircle = L.circle(ll, { radius: accuracy || 0, color: '#1a73e8', weight: 1, fillOpacity: 0.12 }).addTo(miniMap);
+    miniCircle = L.circle(ll, { radius: accuracy || 0, color: '#007EFF', weight: 1, fillOpacity: 0.12 }).addTo(miniMap);
   }
   miniDot.setLatLng(ll);
   miniCircle.setLatLng(ll).setRadius(accuracy || 0);

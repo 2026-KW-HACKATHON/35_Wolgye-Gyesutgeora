@@ -16,6 +16,9 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+/* 안드로이드 Chrome 등이 글씨가 좁은 화면에 안 맞으면 자동으로 폰트를 키우는 "글꼴 부풀리기"를 끕니다.
+   이게 켜져 있으면 같은 CSS인데도 화면·기종마다 글씨 크기가 제각각으로 보일 수 있습니다. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font-family: "Noto Sans KR", sans-serif;
   background: var(--bg-page);
@@ -53,12 +56,37 @@ body {
 }
 .auth-btn:active { background: rgba(0, 126, 255, 0.06); }
 
+/* 프로필 버튼: 로그인하면 마이페이지·닉네임·로그아웃 3개 대신 이 동그란 버튼 하나만 보입니다
+   (네이버지도처럼 — 닉네임 첫 글자를 보여주고, 누르면 마이페이지로 이동. 로그아웃은 그 안에 있음) */
+.profile-btn {
+  width: 40px; height: 40px; flex: 0 0 auto; border-radius: 50%; border: 1.5px solid var(--primary);
+  background: var(--primary); color: #FAFAFA; font-size: 19px; font-weight: 800; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+}
+.profile-btn svg { width: 20px; height: 20px; fill: #FAFAFA; }
+.profile-btn:active { opacity: .85; }
+
 
 .legend {
-  position: absolute; left: 12px; bottom: 96px; z-index: 1000;
+  position: absolute; left: 12px; bottom: 96px; z-index: 1000; max-width: 220px;
   background: var(--bg-surface); border-radius: 10px; padding: 8px 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,.18); font-size: 14px; color: var(--text-sub);
+  word-break: keep-all;   /* 한글이 단어 중간에서 줄바꿈되지 않고, 띄어쓰기 단위로만 바뀌게 */
 }
+.legend[hidden] { display: none; }
+.legend-close {
+  position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border: 0;
+  background: var(--bg-surface); border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  color: var(--text-muted); font-size: 11px; cursor: pointer;
+}
+.legend-reopen {
+  position: absolute; left: 12px; bottom: 96px; z-index: 1000;
+  min-height: 40px; padding: 0 14px; border: 2px solid transparent; border-radius: 20px;
+  background: var(--bg-surface); color: var(--text-sub); font-size: 13.5px; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); cursor: pointer;
+}
+.legend-reopen:active { border-color: var(--primary); }
+.legend-reopen[hidden] { display: none; }
 .legend div { display: flex; align-items: center; gap: 8px; line-height: 1.8; }
 .legend-stat {
   font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 4px;
@@ -67,37 +95,69 @@ body {
 .legend-stat[hidden] { display: none; }
 .legend i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #FAFAFA; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
 
+/* 서비스 소개(온보딩)의 아이콘 안내 + 두 가지 시작 버튼 */
+.onboard-legend {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 10px 0 4px;
+  font-size: 14px; color: var(--text-sub);
+}
+.onboard-legend div { display: flex; align-items: center; gap: 8px; }
+.onboard-legend i {
+  width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto;
+  border: 2px solid #FAFAFA; box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+}
+.onboard-actions { display: flex; gap: 10px; margin-top: 18px; }
+.onboard-action-btn {
+  flex: 1; min-height: 76px; padding: 10px; border: 2px solid var(--primary); border-radius: 14px;
+  background: var(--bg-surface); color: var(--primary); font-family: inherit; font-weight: 700; font-size: 14.5px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+}
+.onboard-action-btn .icon { font-size: 24px; }
+.onboard-action-btn:active { background: rgba(0, 126, 255, 0.08); }
+
+/* 지도 오른쪽 아래 버튼들: 평소엔 테두리가 안 보이다가, 누르고 있는 동안만 파란 테두리가 보이게 합니다.
+   ("테두리가 항상 둘려 있어서 눌러야만 생기면 좋겠다"는 피드백, 2026-10-08 — 늘 선택된 것처럼 보여 헷갈림) */
 .locate-btn {
   position: absolute; right: 12px; bottom: 96px; z-index: 1000;
-  min-height: 48px; padding: 0 16px; border: 2px solid; border-color: var(--primary); border-radius: 24px;
+  min-height: 48px; padding: 0 16px; border: 2px solid transparent; border-radius: 24px;
   background: var(--bg-surface); color: var(--primary); font-size: 15px; font-weight: 700;
   box-shadow: 0 4px 14px rgba(34, 48, 224, 0.14); cursor: pointer;
 }
-.locate-btn:active { background: rgba(0, 126, 255, 0.08); }
+.locate-btn:active { border-color: var(--primary); }
 
 
 
 .filter-btn {
   position: absolute; right: 12px; bottom: 152px; z-index: 1000;
-  min-height: 48px; padding: 0 18px; border: 2px solid; border-color: var(--primary); border-radius: 24px;
+  min-height: 48px; padding: 0 18px; border: 2px solid transparent; border-radius: 24px;
   background: var(--bg-surface); color: var(--primary); font-size: 15px; font-weight: 700;
   box-shadow: 0 4px 14px rgba(34, 48, 224, 0.14); cursor: pointer;
 }
-.filter-btn.active { background: var(--primary); color: #FAFAFA; }   /* 조건이 걸려 있으면 눈에 띄게 */
+.filter-btn:active { border-color: var(--primary); }
+.filter-btn.active { background: var(--primary); color: #FAFAFA; }   /* 조건이 걸려 있으면 눈에 띄게 (누름 상태와 다른, 계속 켜 있는 표시) */
 
 
 
+/* 경로 찾기: 2026-10-08, 오른쪽이 버튼으로 지저분해 보인다는 피드백으로 지도 앱들처럼
+   검색창 옆 작은 아이콘 버튼으로 옮김 (.search-row 안에서 씀, 위치는 거기서 정해짐) */
 .route-btn {
+  flex: 0 0 auto; width: 50px; height: 50px; border: 2px solid transparent; border-radius: 16px;
+  background: var(--bg-surface); color: var(--primary); font-size: 22px;
+  box-shadow: 0 4px 16px rgba(34, 48, 224, 0.10); cursor: pointer;
+}
+.route-btn:active { border-color: var(--primary); }
+
+.text-size-btn {
   position: absolute; right: 12px; bottom: 208px; z-index: 1000;
-  min-height: 48px; padding: 0 18px; border: 2px solid; border-color: var(--primary); border-radius: 24px;
+  min-height: 48px; padding: 0 16px; border: 2px solid transparent; border-radius: 24px;
   background: var(--bg-surface); color: var(--primary); font-size: 15px; font-weight: 700;
   box-shadow: 0 4px 14px rgba(34, 48, 224, 0.14); cursor: pointer;
 }
-.route-btn:active { background: rgba(0, 126, 255, 0.08); }
+.text-size-btn:active { border-color: var(--primary); }
+.text-size-btn.active { background: var(--primary); color: #FAFAFA; }   /* 글씨 크게가 켜져 있으면 눈에 띄게 */
 
 
 .route-clear-btn {
-  position: absolute; left: 50%; transform: translateX(-50%); top: 84px; z-index: 1000;
+  position: absolute; left: 50%; transform: translateX(-50%); top: var(--below-search, 140px); z-index: 1000;
   min-height: 40px; padding: 0 16px; border: 0; border-radius: 20px;
   background: rgba(31,45,61,.92); color: #FAFAFA; font-size: 13.5px; font-weight: 700; cursor: pointer;
 }
@@ -153,7 +213,7 @@ body {
 }
 .toast-btn:active { background: #dfe6ee; }
 
-.leaflet-top.leaflet-right { top: 138px; }   /* 상단 바와 검색란 아래로 */
+.leaflet-top.leaflet-right { top: var(--below-search, 150px); }   /* 상단 바와 검색란(+경로 버튼) 아래로, js/layout.js가 실제 높이에 맞춰 계산함 */
 
 /* ===== 제보 위치 직접 선택 ===== */
 .pick-open {
@@ -207,7 +267,8 @@ body {
   right: 12px;
   z-index: 1000;
 }
-.search-form { position: relative; }
+.search-row { display: flex; align-items: center; gap: 8px; }
+.search-form { position: relative; flex: 1; min-width: 0; }
 .search-form input, .pick-search input {
   width: 100%; min-height: 50px; padding: 0 46px 0 18px; border: 0; border-radius: 16px;
   background: var(--bg-surface); box-shadow: 0 4px 16px rgba(34, 48, 224, 0.10);
@@ -299,6 +360,20 @@ button:disabled { opacity: .6; cursor: default; }
 /* ===== 제보 등록 창 ===== */
 .sheet.report, .sheet.sheet-flush { padding-bottom: 0; }
 .sheet-title { margin: 0 40px 4px 0; font-size: 22px; }
+
+/* 마이페이지: 닉네임 + 로그아웃 (상단바 프로필 버튼을 누르면 들어오는 화면) */
+.mypage-nickname { margin: 0 0 4px; font-size: 15px; color: var(--text-sub); font-weight: 700; }
+.mypage-logout {
+  margin: 0 0 8px; padding: 2px 0; border: 0; background: none; color: var(--text-muted);
+  font-size: 13px; font-weight: 700; text-decoration: underline; font-family: inherit; cursor: pointer;
+}
+
+/* 포인트 내역: 최근 N개월만 보이다가 눌러서 전체 보기 */
+.point-range-toggle {
+  display: block; width: 100%; margin: 4px 0 2px; padding: 10px 0; border: 0; border-top: 1px solid var(--border);
+  background: none; color: var(--primary); font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+}
+.point-range-toggle[hidden] { display: none; }
 .section-title { margin: 20px 0 8px; font-size: 16px; font-weight: 700; }
 .section-title .hint { font-weight: 400; font-size: 12px; color: var(--text-muted); }
 
@@ -324,9 +399,9 @@ button:disabled { opacity: .6; cursor: default; }
 .photo-url-row { display: flex; gap: 8px; margin-top: 8px; }
 .photo-url-row input {
   flex: 1; min-width: 0; min-height: 44px; padding: 0 12px;
-  border: 1.5px solid #c5ccd4; border-radius: 10px; font-size: 14px; font-family: inherit;
+  border: 1.5px solid #c5ccd4; border-radius: 10px; font-size: 16px; font-family: inherit;
 }
-.photo-url-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47,111,237,.2); }
+.photo-url-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 126, 255, 0.2); }
 .photo-url-row .check-btn { min-height: 44px; }
 
 .loc-box {
@@ -479,6 +554,12 @@ button:disabled { opacity: .6; cursor: default; }
 .review-badge.rejected { background: #c62828; }
 .my-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
 .my-meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.my-hide-btn {
+  flex: 0 0 auto; align-self: flex-start; min-height: 32px; padding: 0 10px; border: 1.5px solid var(--border);
+  border-radius: 16px; background: var(--bg-surface); color: var(--text-muted); font-size: 12.5px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+}
+.my-hide-btn:active { border-color: var(--primary); color: var(--primary); }
 
 /* 필터 창 하단: 결과 건수 + 초기화 / 지도에서 보기 */
 .filter-result { font-size: 14px; color: var(--text-sub); margin-bottom: 8px; }
@@ -515,16 +596,31 @@ button:disabled { opacity: .6; cursor: default; }
 }
 .me {
   width: 16px; height: 16px; border-radius: 50%; background: var(--primary);
-  border: 3px solid #FAFAFA; box-shadow: 0 0 0 6px rgba(26,115,232,.25);
+  border: 3px solid #FAFAFA; box-shadow: 0 0 0 6px rgba(0,126,255,.25);
 }
 
-.popup { width: 220px; font-size: 15px; }
+/* 제보 상세 시트 (마커를 누르면 열림, 2026-10-08부터 아래에서 올라오는 시트로 표시) */
+#reportDetailBody { margin-top: 28px; }   /* 오른쪽 위 닫기(✕) 버튼과 사진이 겹치지 않게 */
+.popup { width: 100%; font-size: 16px; }
 .popup-imgfail {
-  flex: 0 0 auto; width: 100%; height: 120px; border-radius: 8px; background: var(--bg-soft);
+  flex: 0 0 auto; width: 100%; height: 160px; border-radius: 8px; background: var(--bg-soft);
   display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-muted);
 }
 .popup .photos { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; }
-.popup .photos img { height: 120px; border-radius: 8px; flex: 0 0 auto; max-width: 100%; object-fit: cover; }
+.popup .photos img { height: 160px; border-radius: 8px; flex: 0 0 auto; max-width: 100%; object-fit: cover; cursor: pointer; }
+
+/* 사진 크게 보기 */
+.lightbox {
+  position: absolute; inset: 0; z-index: 3000;
+  background: rgba(0,0,0,.92);
+  display: flex; align-items: center; justify-content: center;
+}
+.lightbox[hidden] { display: none; }
+.lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lightbox-close {
+  position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; z-index: 1;
+  border: 0; border-radius: 50%; background: rgba(255,255,255,.15); color: #FAFAFA; font-size: 20px; cursor: pointer;
+}
 .popup .tags { margin-bottom: 6px; }
 .popup .tag {
   display: inline-block; background: var(--bg-soft); border-radius: 10px;
@@ -545,3 +641,89 @@ button:disabled { opacity: .6; cursor: default; }
   background: none; color: #8a94a0; font-size: 12px; font-family: inherit; text-align: center;
   text-decoration: underline; cursor: pointer;
 }
+
+/* ===== 글씨 크게 보기 (barrier-free, 상단바 Aa 버튼으로 켜고 끔, 2026-10-08 추가) =====
+   읽는 내용(설명·안내·목록) 위주로 키우고, 지도·마커·버튼 크기 같은 레이아웃 요소는 그대로 둡니다.
+   선택자가 전부 "html.text-lg .원래클래스" 형태라 원래 규칙보다 자동으로 우선하므로, 파일 어디에 둬도 됩니다. */
+html.text-lg body { font-size: 18px; }
+html.text-lg .topbar { font-size: 18px; }
+html.text-lg .topbar small { font-size: 14px; }
+html.text-lg .auth-btn { font-size: 16px; }
+
+html.text-lg .sheet-title { font-size: 26px; }
+html.text-lg .section-title { font-size: 19px; }
+html.text-lg .section-title .hint { font-size: 13px; }
+html.text-lg .sheet-note { font-size: 16px; }
+html.text-lg .sheet-note.small { font-size: 15px; }
+html.text-lg .sheet label { font-size: 18px; }
+html.text-lg .sheet .hint { font-size: 14px; }
+html.text-lg .sheet input,
+html.text-lg .sheet textarea { font-size: 19px; }
+html.text-lg .field-msg { font-size: 16px; }
+html.text-lg .tag-chip { font-size: 17px; }
+html.text-lg .check-btn { font-size: 17px; }
+html.text-lg .primary { font-size: 20px; }
+html.text-lg .tab { font-size: 18px; }
+
+html.text-lg .popup { font-size: 18px; }
+html.text-lg .status-badge { font-size: 16px; }
+html.text-lg .popup .tag { font-size: 16px; }
+html.text-lg .popup .meta { font-size: 15px; }
+html.text-lg .tts-btn { font-size: 16px; }
+html.text-lg .popup-flag { font-size: 14px; }
+
+html.text-lg .points-value { font-size: 36px; }
+html.text-lg .points-label { font-size: 16px; }
+html.text-lg .points-more { font-size: 17px; }
+html.text-lg .points-sum { font-size: 16px; }
+html.text-lg .point-reason { font-size: 17px; }
+html.text-lg .point-sub { font-size: 15px; }
+html.text-lg .point-amount { font-size: 20px; }
+
+html.text-lg .store-example-note { font-size: 15px; }
+html.text-lg .store-item-shop { font-size: 14px; }
+html.text-lg .store-item-name { font-size: 17px; }
+html.text-lg .store-item-desc { font-size: 15px; }
+html.text-lg .store-item-cost { font-size: 18px; }
+
+html.text-lg .coupon-item-name { font-size: 18px; }
+html.text-lg .coupon-item-cost { font-size: 15px; }
+html.text-lg .coupon-item-code { font-size: 15px; }
+html.text-lg .coupon-item-date { font-size: 14px; }
+
+html.text-lg .my-title { font-size: 17px; }
+html.text-lg .my-meta { font-size: 15px; }
+html.text-lg .my-hide-btn { font-size: 14px; }
+
+html.text-lg .route-point-text { font-size: 16.5px; }
+html.text-lg .route-summary { font-size: 15px; }
+html.text-lg .route-warning-title { font-size: 16px; }
+html.text-lg .route-warning-dist { font-size: 14px; }
+html.text-lg .route-ok { font-size: 16px; }
+html.text-lg .route-more { font-size: 14px; }
+
+html.text-lg .search-item-title { font-size: 17px; }
+html.text-lg .search-item-sub { font-size: 15px; }
+html.text-lg .search-note { font-size: 16px; }
+html.text-lg .search-heading { font-size: 13px; }
+
+html.text-lg .filter-result { font-size: 16px; }
+
+html.text-lg .done-summary { font-size: 17px; }
+html.text-lg .done-celebrate { font-size: 17px; }
+html.text-lg .done-points { font-size: 16px; }
+
+html.text-lg .legend { font-size: 16px; }
+html.text-lg .legend-stat { font-size: 13px; }
+html.text-lg .legend-reopen { font-size: 15px; }
+html.text-lg .toast { font-size: 17px; }
+html.text-lg .text-size-btn { font-size: 16px; }
+html.text-lg .review-badge { font-size: 13px; }
+html.text-lg .mypage-nickname { font-size: 17px; }
+html.text-lg .mypage-logout { font-size: 15px; }
+html.text-lg .point-range-toggle { font-size: 16px; }
+html.text-lg .profile-btn { font-size: 18px; }
+
+/* 온보딩(서비스 소개) 화면 — "글씨 크게" 기능을 만든 뒤에 추가된 화면이라 아래에 따로 넣음 */
+html.text-lg .onboard-legend { font-size: 15px; }
+html.text-lg .onboard-action-btn { font-size: 15.5px; }

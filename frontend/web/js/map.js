@@ -3,6 +3,7 @@
 let tagInfo = {};   // code -> { label, category }
 let allTags = [];   // 서버에서 받은 태그 전체 (제보 폼의 선택지)
 const markersById = {};   // 제보 id -> 지도 마커
+const reportsById = {};   // 제보 id -> 제보 데이터 (상세 시트에 다시 쓰려고 보관)
 
 const map = L.map('map', { zoomControl: false }).setView(DEFAULT_CENTER, 16);
 L.control.zoom({ position: 'topright' }).addTo(map);
@@ -55,8 +56,127 @@ function popupSpeechText(r) {
   return parts.join('. ');
 }
 
-// 팝업이 닫히면 읽고 있던 음성도 함께 멈춥니다 (닫은 뒤에도 계속 읽으면 어색해서)
-map.on('popupclose', () => ttsStop());
+// 제보 상세 시트 (마커를 누르면 열림, 기존엔 Leaflet 팝업이었는데 마커 위치에 따라
+// 상단바·검색창과 겹쳐서 2026-10-08에 다른 화면과 같은 "아래에서 올라오는 시트"로 바꿨습니다)
+const reportDetailSheet = document.getElementById('reportDetailSheet');
+let openReportId = null;   // 지금 열려 있는 제보 id (조회수 갱신이 늦게 와도 엉뚱한 시트를 안 건드리게)
+
+function openReportSheet(r) {
+  openReportId = r.id;
+  const body = document.getElementById('reportDetailBody');
+  body.textContent = '';
+  body.appendChild(popupContent(r));
+  reportDetailSheet.hidden = false;
+
+  // 시트를 열 때마다 조회수 집계를 시도합니다. 실패해도(네트워크 등) 시트 자체는 그대로 보여주면 되므로 조용히 무시합니다.
+  recordView(r.id)
+    .then(res => {
+      if (openReportId === r.id && res && res.view_count != null && res.view_count !== r.view_count) {
+        r.view_count = res.view_count;
+        body.textContent = '';
+        body.appendChild(popupContent(r));
+      }
+    })
+    .catch(() => {});
+}
+
+function closeReportSheet() {
+  reportDetailSheet.hidden = true;
+  openReportId = null;
+  ttsStop();   // 닫은 뒤에도 계속 읽으면 어색해서
+  const card = reportDetailSheet.querySelector('.sheet');
+  card.style.transition = '';
+  card.style.transform = '';
+  card.style.opacity = '';
+}
+
+document.getElementById('reportDetailClose').addEventListener('click', closeReportSheet);
+reportDetailSheet.addEventListener('click', e => { if (e.target === reportDetailSheet) closeReportSheet(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !reportDetailSheet.hidden) closeReportSheet();
+});
+
+// 옆으로 밀면 닫히게 합니다 (2026-10-08 추가, 스마트폰에서 더 자연스럽게 닫을 수 있도록. ✕ 버튼·바깥
+// 클릭·Esc 키는 이것과 별개로 이미 모든 환경에서 됩니다). 컴퓨터는 손가락 스와이프가 없으니, 마우스로
+// 눌러서 끄는 동작도 똑같이 지원합니다. 사진을 눌러 크게 보는 동작과 안 헷갈리게, 위아래보다 옆으로
+// 더 많이 움직였을 때만 반응하고, 사진·버튼 위에서 마우스를 누르기 시작한 경우는 끌기로 치지 않습니다.
+(function enableSwipeToClose() {
+  const card = reportDetailSheet.querySelector('.sheet');
+  let startX = 0, startY = 0, dx = 0, dragging = false, locked = null;
+
+  function startDrag(x, y) {
+    startX = x; startY = y;
+    dx = 0; dragging = true; locked = null;
+    card.style.transition = 'none';
+  }
+
+  // 가로로 끌고 있는 중이면 true를 돌려줍니다 (호출부가 기본 동작을 막을지 판단할 때 씀)
+  function moveDrag(x, y) {
+    if (!dragging) return false;
+    const diffX = x - startX, diffY = y - startY;
+    if (locked === null) {
+      if (Math.abs(diffX) < 8 && Math.abs(diffY) < 8) return false;   // 방향이 뚜렷해질 때까지 기다림
+      locked = Math.abs(diffX) > Math.abs(diffY) ? 'x' : 'y';
+    }
+    if (locked !== 'x') return false;   // 세로로 더 많이 움직였으면 스크롤로 보고 그대로 둠
+    dx = diffX;
+    card.style.transform = 'translateX(' + dx + 'px)';
+    card.style.opacity = String(Math.max(1 - Math.abs(dx) / 300, 0.3));
+    return true;
+  }
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    if (locked === 'x' && Math.abs(dx) > 90) {
+      closeReportSheet();
+      return;
+    }
+    card.style.transition = 'transform .2s, opacity .2s';
+    card.style.transform = '';
+    card.style.opacity = '';
+  }
+
+  // 손가락(스마트폰) — 사진·버튼(닫기 ✕ 포함) 위에서 시작한 터치는 끌기로 보지 않습니다.
+  // (안 그러면 ✕ 버튼을 누를 때도 끌기가 시작돼서 탭이 씹히는 기종이 있었습니다)
+  card.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || e.target.closest('img, button, a')) return;
+    startDrag(e.touches[0].clientX, e.touches[0].clientY);
+  });
+  card.addEventListener('touchmove', e => {
+    if (moveDrag(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault();
+  });
+  card.addEventListener('touchend', endDrag);
+  card.addEventListener('touchcancel', endDrag);
+
+  // 마우스(컴퓨터)
+  card.addEventListener('mousedown', e => {
+    if (e.target.closest('img, button, a')) return;   // 사진·버튼 클릭은 그대로 동작하게 둠
+    startDrag(e.clientX, e.clientY);
+  });
+  window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+  window.addEventListener('mouseup', endDrag);
+})();
+
+// 사진 크게 보기 (2026-10-08 추가) — 제보 상세 시트의 사진을 누르면 화면 전체로 확대해서 보여줍니다.
+const photoLightbox = document.getElementById('photoLightbox');
+const photoLightboxImg = document.getElementById('photoLightboxImg');
+
+function openLightbox(src) {
+  photoLightboxImg.src = src;
+  photoLightbox.hidden = false;
+}
+
+function closeLightbox() {
+  photoLightbox.hidden = true;
+  photoLightboxImg.src = '';   // 닫고 나서도 큰 사진을 계속 메모리에 들고 있지 않게
+}
+
+document.getElementById('photoLightboxClose').addEventListener('click', closeLightbox);
+photoLightbox.addEventListener('click', e => { if (e.target !== photoLightboxImg) closeLightbox(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !photoLightbox.hidden) closeLightbox();
+});
 
 function popupContent(r) {
   const box = document.createElement('div');
@@ -66,9 +186,10 @@ function popupContent(r) {
     const photos = document.createElement('div');
     photos.className = 'photos';
     r.images.forEach(path => {
+      const src = BASE_URL + path;
       const img = document.createElement('img');
-      img.src = BASE_URL + path;
-      img.alt = '제보 사진';
+      img.src = src;
+      img.alt = '제보 사진 (눌러서 크게 보기)';
       // 사진을 못 불러오면 빈 칸 대신 안내 글자를 보여줍니다
       img.addEventListener('error', () => {
         const fail = document.createElement('span');
@@ -76,6 +197,7 @@ function popupContent(r) {
         fail.textContent = '사진을 불러오지 못했어요';
         img.replaceWith(fail);
       });
+      img.addEventListener('click', () => openLightbox(src));
       photos.appendChild(img);
     });
     box.appendChild(photos);
@@ -161,43 +283,35 @@ function renderReports(reports) {
   if (reports) allReports = reports;
   markerLayer.clearLayers();
   Object.keys(markersById).forEach(id => delete markersById[id]);
+  Object.keys(reportsById).forEach(id => delete reportsById[id]);
   visibleReports().forEach(r => {
     const icon = L.divIcon({
       className: '',
       html: '<div class="pin" style="background:' + markerColor(r.tags) + '"></div>',
-      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14]
+      iconSize: [26, 26], iconAnchor: [13, 13]
     });
     const marker = L.marker([r.latitude, r.longitude], { icon })
-      .bindPopup(() => popupContent(r), { minWidth: 220 })
+      .on('click', () => openReportSheet(r))
       .addTo(markerLayer);
-    // 팝업을 열 때마다 조회수 집계를 시도합니다. 실패해도(네트워크 등) 팝업 자체는 그대로 보여주면 되므로 조용히 무시합니다.
-    // 서버가 실제로 센 값을 돌려주면 그 값으로 갱신해서, 열려 있는 팝업에도 바로 반영합니다.
-    marker.on('popupopen', () => {
-      recordView(r.id)
-        .then(res => {
-          if (res && res.view_count != null && res.view_count !== r.view_count) {
-            r.view_count = res.view_count;
-            if (marker.isPopupOpen()) marker.getPopup().setContent(popupContent(r));
-          }
-        })
-        .catch(() => {});
-    });
     markersById[r.id] = marker;
+    reportsById[r.id] = r;
   });
 }
 
-// 지도에서 해당 제보로 이동해 팝업을 엽니다 (목록에 없으면 아무 일도 안 함)
+// 지도에서 해당 제보로 이동해 상세 시트를 엽니다 (목록에 없으면 아무 일도 안 함)
 function focusReport(id) {
   const marker = markersById[id];
-  if (!marker) return;
+  const r = reportsById[id];
+  if (!marker || !r) return;
   map.setView(marker.getLatLng(), 18);
-  marker.openPopup();
+  openReportSheet(r);
 }
 
 // 현재 위치 표시 (파란 점은 하나만 유지). 실패하면 onError(안내 문구)를 부르고 지도는 그대로 둡니다.
 let meMarker = null;
 
-function locateMe(onError) {
+// onSuccess: 위치를 찾은 뒤 호출 (예: "확인 중…" 안내를 치우는 용도). 둘 다 선택.
+function locateMe(onError, onSuccess) {
   if (!navigator.geolocation) {
     if (onError) onError('이 브라우저에서는 위치를 확인할 수 없어요. 지도는 그대로 쓸 수 있어요.');
     return;
@@ -213,6 +327,7 @@ function locateMe(onError) {
       }).addTo(map);
     }
     map.setView(ll, 16);
+    if (onSuccess) onSuccess();
   }, err => {
     if (!onError) return;
     onError(err.code === 1

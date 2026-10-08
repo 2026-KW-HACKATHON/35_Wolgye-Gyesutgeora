@@ -34,14 +34,24 @@ function clearSession() {
   updateAuthBar();
 }
 
-// ----- 상단 바: 로그인 버튼 / 닉네임 + 로그아웃 -----
+// ----- 상단 바: 로그인 전엔 "로그인" 버튼, 로그인 후엔 동그란 프로필 버튼 하나로 (네이버지도 참고, 2026-10-08) -----
+// 닉네임·로그아웃은 이제 상단바가 아니라 프로필 버튼을 눌러 들어가는 마이페이지 안에 있습니다.
 
 function updateAuthBar() {
   const user = getUser();
   const loggedIn = isLoggedIn();
-  document.getElementById('userName').textContent = loggedIn && user ? user.nickname + '님' : '';
-  document.getElementById('authBtn').textContent = loggedIn ? '로그아웃' : '로그인';
-  document.getElementById('mypageBtn').hidden = !loggedIn;
+  const mypageBtn = document.getElementById('mypageBtn');
+  document.getElementById('authBtn').hidden = loggedIn;
+  mypageBtn.hidden = !loggedIn;
+  if (loggedIn && user) {
+    const nickname = user.nickname || '';
+    // 이모지(👤)는 CSS color로 하얀색을 줄 수 없어서(이모지는 고유색 고정) SVG 아이콘으로 교체
+    // width/height/fill을 svg 태그에 직접 넣어서(스타일시트 캐시가 안 맞아도) 항상 흰 사람 아이콘이 보이게 함
+    mypageBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="#FAFAFA" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.69-8 6v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-3.31-3.58-6-8-6Z"/></svg>';
+    mypageBtn.setAttribute('aria-label', '마이페이지 (' + nickname + '님)');
+  }
+  // 로그인 상태가 바뀌면 상단바 버튼 구성이 바뀌어서, 검색줄 위치도 다시 맞춰야 합니다 (js/layout.js)
+  if (typeof layoutTopUI === 'function') layoutTopUI();
 }
 
 // ----- 로그인·회원가입 창 -----
@@ -223,15 +233,14 @@ registerForm.addEventListener('submit', async e => {
   });
 });
 
-// 상단 바 버튼: 로그인 창 열기 / 로그아웃
-document.getElementById('authBtn').addEventListener('click', () => {
-  if (isLoggedIn()) {
-    clearSession();
-    showToast('로그아웃했어요.', 2000);
-  } else {
-    openAuth('login');
-  }
-});
+// 상단 바 버튼: 로그인 창 열기 (로그인 상태에선 이 버튼이 숨고 프로필 버튼이 대신 보임)
+document.getElementById('authBtn').addEventListener('click', () => openAuth('login'));
+
+// 로그아웃은 마이페이지 안으로 옮김 (js/mypage.js에서 버튼을 씀)
+function logout() {
+  clearSession();
+  showToast('로그아웃했어요.', 2000);
+}
 
 // 시작할 때 저장된 토큰이 아직 유효한지 확인 (만료됐으면 로그아웃 처리)
 async function restoreSession() {
