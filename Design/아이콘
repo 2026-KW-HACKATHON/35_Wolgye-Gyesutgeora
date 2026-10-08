@@ -1,0 +1,30 @@
+ /* Vector */
+
+position: absolute;
+left: 8.26%;
+right: 8.34%;
+top: 12.44%;
+bottom: 12.5%;
+
+border: 2px solid #7C3AED; (색 변경)
+
+ /* Vector */
+
+position: absolute;
+left: 8.33%;
+right: 8.33%;
+top: 8.33%;
+bottom: 8.33%;
+
+border: 2px solid #DC2626; (색 변경)
+
+ /* Vector */
+
+position: absolute;
+left: 8.33%;
+right: 8.33%;
+top: 29.17%;
+bottom: 29.17%;
+
+border: 2px solid #D97706; (색 변경)
+
